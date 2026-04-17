@@ -3,7 +3,7 @@ name: Build RiMusic APK
 on:
   push:
     branches: [ master, main ]
-  workflow_dispatch: # Taaki aap manually bhi build start kar sakein
+  workflow_dispatch:
 
 jobs:
   build:
@@ -23,12 +23,18 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build Debug APK
-        # assembleDebug se bina kisi extra key/signature ke APK ban jayega
+        # assembleDebug se bina kisi extra key ke APK ban jayega
         run: ./gradlew assembleDebug --stacktrace
+
+      - name: Check Where APK is (Debug Log)
+        # Ye step sirf check karne ke liye hai ki file kahan bani hai
+        run: find . -name "*.apk"
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: RiMusic-Premium-Build
-          path: app/build/outputs/apk/debug/app-debug.apk
+          # Humne path ko flexible kar diya hai
+          path: "**/build/outputs/apk/debug/*.apk"
+          if-no-files-found: error
           
