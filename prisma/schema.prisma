@@ -1,0 +1,66 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// 1. WhatsApp API aur Gemini Bot ki Dynamic Settings ke liye
+model SystemSettings {
+  id                  String   @id @default("main_settings")
+  phoneNumberId       String   @default("")
+  businessAccountId   String   @default("")
+  accessToken         String   @default("")
+  verifyToken         String   @default("basekey_secret_token")
+  isAiBotActive       Boolean  @default(false)
+  geminiSystemPrompt  String   @default("You are a helpful AI assistant for BaseKey CRM.")
+  updatedAt           DateTime @updatedAt
+}
+
+// 2. WhatsApp Contacts (Chat Sidebar ke liye)
+model Contact {
+  id              String    @id @default(uuid())
+  phoneNumber     String    @unique // WhatsApp Number (e.g., "918252366912")
+  name            String?   // WhatsApp profile name
+  unreadCount     Int       @default(0)
+  lastMessageAt   DateTime  @default(now())
+  isSessionActive Boolean   @default(true) // 24-Hour Session Window Window Indicator
+  messages        Message[]
+  createdAt       DateTime  @default(now())
+}
+
+// 3. Messages Model (Full Chat System & Media Engine)
+model Message {
+  id          String        @id // Meta WhatsApp Message ID (e.g., "wamid.HBgM...")
+  contactId   String
+  contact     Contact       @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  body        String        @default("") // Text message or media caption
+  type        MessageType   @default(TEXT) // TEXT, IMAGE, VIDEO, AUDIO, DOCUMENT, INTERACTIVE
+  direction   MessageDirection
+  status      MessageStatus @default(SENT) // SENT, DELIVERED, READ
+  mediaUrl    String?       // Cloudinary Secure URL for Images/Videos/Docs
+  timestamp   DateTime      @default(now())
+}
+
+// Enums for Strict Data Typing
+enum MessageType {
+  TEXT
+  IMAGE
+  VIDEO
+  AUDIO
+  DOCUMENT
+  INTERACTIVE
+}
+
+enum MessageDirection {
+  INBOUND  // User se aaya hua message
+  OUTBOUND // Admin ya Gemini dwara bheja gaya message
+}
+
+enum MessageStatus {
+  SENT      // Single gray tick
+  DELIVERED // Double gray tick
+  READ      // Double blue tick
+}
