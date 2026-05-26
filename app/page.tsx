@@ -1,10 +1,38 @@
 "use client";
 
-import { Search, MoreVertical, MessageSquare, Phone, Video } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { auth } from "../lib/firebase"; 
+import { onAuthStateChanged } from "firebase/auth";
+import { Search, MoreVertical, MessageSquare, Phone, Video, Loader2 } from "lucide-react";
 import { useChatStore } from "../store/useChatStore";
+import Sidebar from "../components/Sidebar"; // Naya Sidebar yahan import kiya hai
 
 export default function ChatDashboard() {
+  const router = useRouter();
+  const [isAuthorized, setIsAuthorized] = useState(false);
   const { activeContact, setActiveContact } = useChatStore();
+
+  // SECURITY GUARD: Check karo user login hai ya nahi
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        setIsAuthorized(true); // Pass mil gaya, andar aane do
+      } else {
+        router.push("/login"); // Pass nahi hai, Login page par wapas bhejo
+      }
+    });
+    return () => unsubscribe();
+  }, [router]);
+
+  // Jab tak check ho raha hai, tab tak loading dikhao
+  if (!isAuthorized) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-background">
+        <Loader2 className="w-10 h-10 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   // Dummy Contacts for Testing UI
   const dummyContacts = [
@@ -13,12 +41,15 @@ export default function ChatDashboard() {
   ];
 
   return (
-    <div className="flex h-screen w-full bg-background overflow-hidden p-4">
+    <div className="flex h-screen w-full bg-background overflow-hidden p-2 sm:p-4">
       {/* Main Glassmorphism Container */}
       <div className="flex w-full h-full glassmorphism rounded-2xl overflow-hidden shadow-2xl border border-border">
         
-        {/* SIDEBAR (Contact List) */}
-        <div className="w-1/3 h-full border-r border-border flex flex-col bg-card/50">
+        {/* 1. NEW SMART SIDEBAR (Leftmost) */}
+        <Sidebar />
+
+        {/* 2. CONTACT LIST (Middle) */}
+        <div className="w-[300px] lg:w-1/3 h-full border-r border-border flex flex-col bg-card/50">
           {/* Sidebar Header */}
           <div className="p-4 flex items-center justify-between border-b border-border bg-card/80">
             <h1 className="text-xl font-bold text-primary">BaseKey CRM</h1>
@@ -74,7 +105,7 @@ export default function ChatDashboard() {
           </div>
         </div>
 
-        {/* MAIN CHAT AREA */}
+        {/* 3. MAIN CHAT AREA (Right) */}
         <div className="flex-1 h-full flex flex-col relative bg-[url('https://i.ibb.co/3s1fKkW/whatsapp-bg-dark.png')] bg-cover bg-center">
           {/* Overlay to make background slightly dark */}
           <div className="absolute inset-0 bg-background/80 z-0"></div>
@@ -93,7 +124,6 @@ export default function ChatDashboard() {
                   </div>
                 </div>
                 <div className="flex gap-5 text-muted-foreground">
-                   {/* WhatsApp API me call block hota hai, isliye disabled look diya hai */}
                   <Video className="w-5 h-5 opacity-50 cursor-not-allowed" />
                   <Phone className="w-5 h-5 opacity-50 cursor-not-allowed" />
                   <Search className="w-5 h-5 cursor-pointer hover:text-primary transition" />
