@@ -2,16 +2,16 @@
 
 import { useEffect, useState } from "react";
 import { auth, database } from "../lib/firebase"; 
-import { ref, get } from "firebase/database"; // 'set' yahan se hata diya gaya hai kyuki wo kaam modal karega
+import { ref, get } from "firebase/database";
 import { onAuthStateChanged } from "firebase/auth";
 import { MessageSquare, Settings, AlertCircle, CheckCircle2, Loader2, Link2 } from "lucide-react";
-import ConfigModal from "./ConfigModal"; // Modal import kiya hai
+import ConfigModal from "./ConfigModal"; 
 
 export default function Sidebar() {
   const [user, setUser] = useState<any>(null);
   const [isMatched, setIsMatched] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
-  const [isModalOpen, setIsModalOpen] = useState<boolean>(false); // Modal ke liye state
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
 
   // 1. Check karna ki user "Match" (Configured) hai ya nahi
   useEffect(() => {
@@ -63,7 +63,12 @@ export default function Sidebar() {
                 <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-background"></div>
               </div>
 
-              <div className="w-12 h-12 text-muted-foreground rounded-2xl flex items-center justify-center hover:bg-white/5 cursor-pointer transition">
+              {/* YAHAN UPDATE KIYA HAI: Settings icon par click karne se popup khulega */}
+              <div 
+                onClick={() => setIsModalOpen(true)} 
+                className="w-12 h-12 text-muted-foreground rounded-2xl flex items-center justify-center hover:bg-white/5 cursor-pointer transition"
+                title="API Configuration"
+              >
                 <Settings className="w-6 h-6" />
               </div>
             </>
@@ -76,7 +81,7 @@ export default function Sidebar() {
               <p className="text-[10px] text-muted-foreground leading-tight">API Not Linked</p>
               
               <button 
-                onClick={() => setIsModalOpen(true)} // Yahan Modal open karne ka logic lagaya
+                onClick={() => setIsModalOpen(true)} 
                 className="mt-4 flex flex-col items-center justify-center gap-1 w-14 h-14 bg-white text-black rounded-xl hover:bg-gray-200 transition shadow-lg"
                 title="Match & Configure API"
               >
@@ -99,13 +104,13 @@ export default function Sidebar() {
         </div>
       </div>
 
-      {/* Ye hamara popup modal hai jo condition match hone par khulega */}
+      {/* Ye hamara popup modal hai jo khulega */}
       <ConfigModal 
         isOpen={isModalOpen} 
         onClose={() => setIsModalOpen(false)} 
         onSuccess={() => {
-          setIsMatched(true); // Save hote hi dashboard chat dikhane lagega
-          setIsModalOpen(false); // Modal band kar dega
+          setIsMatched(true); 
+          setIsModalOpen(false); 
         }} 
       />
     </>
