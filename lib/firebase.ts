@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getDatabase } from "firebase/database"; 
-// Agar aap Firestore use karna chahte hain toh 'firebase/firestore' import karein
+import { getAuth, GoogleAuthProvider } from "firebase/auth"; // Auth ke liye import add kiya
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -17,4 +17,8 @@ const firebaseConfig = {
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const database = getDatabase(app);
 
-export { app, database };
+// Google Login ke liye Auth aur Provider initialize kiya
+const auth = getAuth(app);
+const googleProvider = new GoogleAuthProvider();
+
+export { app, database, auth, googleProvider };
