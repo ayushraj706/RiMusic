@@ -1,7 +1,7 @@
 "use client";
 
 import { Search, MoreVertical, MessageSquare, Phone, Video } from "lucide-react";
-import { useChatStore } from "@/store/useChatStore";
+import { useChatStore } from "../store/useChatStore";
 
 export default function ChatDashboard() {
   const { activeContact, setActiveContact } = useChatStore();
