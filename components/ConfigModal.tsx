@@ -14,21 +14,35 @@ interface ConfigModalProps {
 export default function ConfigModal({ isOpen, onClose, onSuccess }: ConfigModalProps) {
   const [accessToken, setAccessToken] = useState("");
   const [phoneId, setPhoneId] = useState("");
-  const [wabaId, setWabaId] = useState(""); // WhatsApp Business Account ID
+  const [wabaId, setWabaId] = useState(""); 
   const [verifyToken, setVerifyToken] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Jab popup khule, toh ek random 16-character Verify Token generate karo
+  // Jab popup khule, toh local storage se purana data nikalo
   useEffect(() => {
     if (isOpen) {
-      const randomToken = "BASEKEY_" + Math.random().toString(36).substring(2, 15).toUpperCase();
-      setVerifyToken(randomToken);
+      // Local Storage se data read karna
+      const savedToken = localStorage.getItem("metaAccessToken") || "";
+      const savedPhone = localStorage.getItem("metaPhoneId") || "";
+      const savedWaba = localStorage.getItem("metaWabaId") || "";
+      const savedVerifyToken = localStorage.getItem("webhookVerifyToken");
+
+      setAccessToken(savedToken);
+      setPhoneId(savedPhone);
+      setWabaId(savedWaba);
+
+      // Agar pehle se token generate kiya tha toh wahi dikhao, warna naya banao
+      if (savedVerifyToken) {
+        setVerifyToken(savedVerifyToken);
+      } else {
+        const randomToken = "BASEKEY_" + Math.random().toString(36).substring(2, 15).toUpperCase();
+        setVerifyToken(randomToken);
+      }
     }
   }, [isOpen]);
 
   if (!isOpen) return null;
 
-  // Vercel ka webhook URL (Aapki live website ka address + /api/webhook)
   const webhookUrl = "https://ri-music.vercel.app/api/webhook";
 
   const handleSaveConfig = async () => {
@@ -39,9 +53,15 @@ export default function ConfigModal({ isOpen, onClose, onSuccess }: ConfigModalP
 
     setLoading(true);
     try {
+      // 1. Browser ke Local Storage mein save karo (taki agali baar auto-fill ho jaye)
+      localStorage.setItem("metaAccessToken", accessToken);
+      localStorage.setItem("metaPhoneId", phoneId);
+      localStorage.setItem("metaWabaId", wabaId);
+      localStorage.setItem("webhookVerifyToken", verifyToken);
+
       const user = auth.currentUser;
       if (user) {
-        // Firebase Cloud DB mein secure tarike se save kar rahe hain
+        // 2. Firebase Cloud DB mein save karo
         await set(ref(database, `users/${user.uid}/config`), {
           isMatched: true,
           metaAccessToken: accessToken,
@@ -50,10 +70,11 @@ export default function ConfigModal({ isOpen, onClose, onSuccess }: ConfigModalP
           webhookVerifyToken: verifyToken,
           webhookUrl: webhookUrl,
           configuredAt: new Date().toISOString(),
+          isWebhookVerified: false // Default false, jab Meta API ping karega tab ise True karenge
         });
         
-        onSuccess(); // Sidebar ko update karne ke liye
-        onClose(); // Popup band karne ke liye
+        onSuccess(); 
+        onClose(); 
       }
     } catch (error) {
       console.error("Error saving config:", error);
@@ -132,7 +153,7 @@ export default function ConfigModal({ isOpen, onClose, onSuccess }: ConfigModalP
             <div className="flex items-start gap-2 mb-3 bg-blue-500/10 p-3 rounded-lg border border-blue-500/20">
               <ShieldAlert className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
               <p className="text-xs text-blue-400">
-                Put these details in your Meta Developer Dashboard -> Webhooks section to verify your app.
+                Put these details in your Meta Developer Dashboard -&gt; Webhooks section to verify your app.
               </p>
             </div>
             
