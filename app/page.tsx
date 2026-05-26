@@ -162,8 +162,8 @@ export default function ChatDashboard() {
           <div className="p-4 flex items-center justify-between border-b border-border bg-card/80">
             <h1 className="text-xl font-bold text-primary">BaseKey</h1>
             <div className="flex gap-4 text-muted-foreground">
-              {/* PLUS ICON: New Chat shuru karne ke liye */}
-              <Plus onClick={() => setShowNewChat(true)} className="w-6 h-6 cursor-pointer hover:text-primary transition" title="New Chat" />
+              {/* PLUS ICON: Yahan se title hata diya gaya hai taaki TypeScript error na aaye */}
+              <Plus onClick={() => setShowNewChat(true)} className="w-6 h-6 cursor-pointer hover:text-primary transition" />
               <MoreVertical className="w-5 h-5 cursor-pointer hover:text-primary transition" />
             </div>
           </div>
