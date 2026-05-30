@@ -2,19 +2,20 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { auth } from "../lib/firebase"; 
+import { auth, database } from "../lib/firebase"; 
 import { onAuthStateChanged } from "firebase/auth";
+import { ref, onValue, push, set, remove, get } from "firebase/database"; // 'remove' and 'get' added
 import { Search, MoreVertical, MessageSquare, Phone, Video, Loader2, Plus, Send, X, Check, CheckCheck, Reply, Trash2, Smile } from "lucide-react";
 import Sidebar from "../components/Sidebar"; 
 
-// Message interface ko bada kiya hai (Ticks aur Reply ke liye)
+// Interfaces
 interface Message {
-  id: string;
+  id: string; // Firebase push key
   text: string;
   sender: "me" | "them";
   time: string;
-  status?: "sent" | "delivered" | "read"; // Ticks ke liye
-  replyTo?: string; // Agar kisi message ka reply diya hai
+  status?: "sent" | "delivered" | "read";
+  replyTo?: string | null;
 }
 
 interface Contact {
@@ -28,7 +29,9 @@ interface Contact {
 
 export default function ChatDashboard() {
   const router = useRouter();
-  const [isAuthorized, setIsAuthorized] = useState(false);
+  const [user, setUser] = useState<any>(null);
+  const [phoneId, setPhoneId] = useState<string | null>(null); // DB se aayega
+  const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [activeContact, setActiveContact] = useState<Contact | null>(null);
@@ -39,24 +42,86 @@ export default function ChatDashboard() {
   const [newPhoneNumber, setNewPhoneNumber] = useState("");
   const [newChatName, setNewChatName] = useState("");
 
-  // Naya State: Reply karne ke liye
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
-
   const chatEndRef = useRef<HTMLDivElement>(null);
 
+  // 1. Auth & Fetch Dynamic Phone ID from Database
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) setIsAuthorized(true);
-      else router.push("/login");
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (currentUser) {
+        setUser(currentUser);
+        // Database se user ka config/phoneId uthao
+        const configRef = ref(database, `users/${currentUser.uid}/config`);
+        onValue(configRef, (snapshot) => {
+          if (snapshot.exists() && snapshot.val().isMatched) {
+            // Dhyan de: DB me aapne 'phoneId' naam se save kiya hona chahiye
+            setPhoneId(snapshot.val().phoneId || snapshot.val().phoneNumberId); 
+          } else {
+            setPhoneId(null);
+          }
+          setIsLoadingAuth(false);
+        });
+      } else {
+        router.push("/login");
+      }
     });
     return () => unsubscribe();
   }, [router]);
 
+  // 2. Real-time Contacts Listener (using Dynamic Phone ID)
+  useEffect(() => {
+    if (!phoneId) return;
+    
+    const chatsRef = ref(database, `chats/${phoneId}`);
+    const unsubscribe = onValue(chatsRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        const contactList = Object.entries(data).map(([phone, val]: any) => ({
+          id: phone,
+          name: val.info?.name || phone,
+          phoneNumber: phone,
+          lastMessage: val.info?.lastMessage || "",
+          time: val.info?.updatedAt ? new Date(val.info.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "",
+          unread: val.info?.unread || 0
+        })).sort((a, b) => b.time.localeCompare(a.time)); // Sort by latest
+        
+        setContacts(contactList);
+      } else {
+        setContacts([]);
+      }
+    });
+
+    return () => unsubscribe(); // Cleanup listener
+  }, [phoneId]);
+
+  // 3. Real-time Messages Listener for Active Contact
+  useEffect(() => {
+    if (!activeContact || !phoneId) return;
+    
+    const msgRef = ref(database, `chats/${phoneId}/${activeContact.phoneNumber}/messages`);
+    const unsubscribe = onValue(msgRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        // Firebase keys ko 'id' me map kar rahe hain taaki delete karte waqt kaam aaye
+        const msgs = Object.entries(data).map(([key, val]: any) => ({
+          id: key,
+          ...val
+        }));
+        setMessages(prev => ({ ...prev, [activeContact.id]: msgs }));
+      } else {
+        setMessages(prev => ({ ...prev, [activeContact.id]: [] }));
+      }
+    });
+
+    return () => unsubscribe();
+  }, [activeContact, phoneId]);
+
+  // Scroll to bottom
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, activeContact]);
 
-  if (!isAuthorized) {
+  if (isLoadingAuth) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-background">
         <Loader2 className="w-10 h-10 animate-spin text-primary" />
@@ -66,68 +131,85 @@ export default function ChatDashboard() {
 
   const handleOpenChat = (contact: Contact) => {
     setActiveContact(contact);
-    setReplyingTo(null); // Chat badalte hi reply box band kar do
-    setContacts(prev => prev.map(c => c.id === contact.id ? { ...c, unread: 0 } : c));
+    setReplyingTo(null);
+    
+    // Mark as read in DB logic (Optional, currently just clears local state highlight)
+    if (contact.unread > 0 && phoneId) {
+       const infoRef = ref(database, `chats/${phoneId}/${contact.phoneNumber}/info/unread`);
+       set(infoRef, 0);
+    }
   };
 
   const handleStartNewChat = () => {
     if (!newPhoneNumber) return alert("Please enter a phone number!");
-    const newContactId = Date.now().toString();
+    
     const newContact: Contact = {
-      id: newContactId,
+      id: newPhoneNumber,
       name: newChatName || newPhoneNumber,
       phoneNumber: newPhoneNumber,
       lastMessage: "Started a new conversation",
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       unread: 0
     };
-    setContacts(prev => [newContact, ...prev]);
-    setMessages(prev => ({ ...prev, [newContactId]: [] }));
+    
+    // Optimistic UI update
     setActiveContact(newContact);
     setShowNewChat(false);
     setNewPhoneNumber("");
     setNewChatName("");
   };
 
-  const handleSendMessage = () => {
-    if (!inputText.trim() || !activeContact) return;
+  const handleSendMessage = async () => {
+    if (!inputText.trim() || !activeContact || !phoneId) return;
 
-    const newMessage: Message = {
-      id: Date.now().toString(),
+    // 1. Firebase me save karega (UI automatically onValue se update hoga)
+    const msgRef = ref(database, `chats/${phoneId}/${activeContact.phoneNumber}/messages`);
+    const newMsgRef = push(msgRef);
+
+    const messagePayload = {
       text: inputText,
       sender: "me",
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      status: "sent", // Default Single Tick aayega
-      replyTo: replyingTo ? replyingTo.text : undefined // Agar reply tha toh jodo
+      timestamp: Date.now(),
+      status: "sent",
+      replyTo: replyingTo?.text || null
     };
 
-    setMessages(prev => ({
-      ...prev,
-      [activeContact.id]: [...(prev[activeContact.id] || []), newMessage]
-    }));
+    await set(newMsgRef, messagePayload);
 
-    setContacts(prev => {
-      const otherContacts = prev.filter(c => c.id !== activeContact.id);
-      return [{ ...activeContact, lastMessage: inputText, time: newMessage.time }, ...otherContacts];
+    // 2. Info node update karega (Sidebar update ke liye)
+    const infoRef = ref(database, `chats/${phoneId}/${activeContact.phoneNumber}/info`);
+    await set(infoRef, {
+      name: activeContact.name,
+      phoneNumber: activeContact.phoneNumber,
+      lastMessage: inputText,
+      updatedAt: Date.now(),
+      unread: 0
     });
 
     setInputText("");
-    setReplyingTo(null); // Message bhejne ke baad reply box hata do
+    setReplyingTo(null);
+    
+    // Yahan aap Meta WhatsApp API ko call kar sakte hain asli message bhejne ke liye.
+    // fetch('https://graph.facebook.com/v21.0/'+ phoneId + '/messages', { ... })
   };
 
-  // Message Delete karne ka logic (UI se)
-  const handleDeleteMessage = (msgId: string) => {
-    if(!activeContact) return;
-    setMessages(prev => ({
-      ...prev,
-      [activeContact.id]: prev[activeContact.id].filter(msg => msg.id !== msgId)
-    }));
+  // REAL-TIME DELETE LOGIC
+  const handleDeleteMessage = async (msgId: string) => {
+    if(!activeContact || !phoneId) return;
+    
+    // Confirm before delete (optional, UI/UX ke liye acha rehta hai)
+    if(window.confirm("Are you sure you want to delete this message?")) {
+      const msgRef = ref(database, `chats/${phoneId}/${activeContact.phoneNumber}/messages/${msgId}`);
+      await remove(msgRef); // Ye Firebase se udayega, aur UI khud refresh ho jayega
+    }
   };
 
   return (
     <div className="flex h-screen w-full bg-background overflow-hidden p-2 sm:p-4">
       <div className="flex w-full h-full glassmorphism rounded-2xl overflow-hidden shadow-2xl border border-border relative">
         
+        {/* New Chat Modal */}
         {showNewChat && (
           <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
             <div className="bg-card p-6 rounded-2xl border border-border w-96 shadow-2xl">
@@ -152,6 +234,7 @@ export default function ChatDashboard() {
 
         <Sidebar />
 
+        {/* Sidebar Chat List */}
         <div className="w-[300px] lg:w-1/3 h-full border-r border-border flex flex-col bg-card/50">
           <div className="p-4 flex items-center justify-between border-b border-border bg-card/80">
             <h1 className="text-xl font-bold text-primary">BaseKey</h1>
@@ -169,7 +252,9 @@ export default function ChatDashboard() {
           </div>
 
           <div className="flex-1 overflow-y-auto">
-            {contacts.length === 0 ? (
+            {!phoneId ? (
+               <div className="text-center text-muted-foreground mt-10 text-sm">API Config Not Matched.<br/>Please configure via settings.</div>
+            ) : contacts.length === 0 ? (
               <div className="text-center text-muted-foreground mt-10 text-sm">No chats yet.<br/>Click '+' to start messaging.</div>
             ) : (
               contacts.map((contact) => (
@@ -191,11 +276,13 @@ export default function ChatDashboard() {
           </div>
         </div>
 
+        {/* Main Chat Area */}
         <div className="flex-1 h-full flex flex-col relative bg-[url('https://i.ibb.co/3s1fKkW/whatsapp-bg-dark.png')] bg-cover bg-center">
           <div className="absolute inset-0 bg-background/85 z-0"></div>
 
           {activeContact ? (
             <div className="flex flex-col h-full z-10">
+              {/* Header */}
               <div className="p-4 flex items-center justify-between border-b border-border bg-card/90 backdrop-blur-md">
                 <div className="flex items-center">
                   <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-bold">{activeContact.name.charAt(0).toUpperCase()}</div>
@@ -206,6 +293,7 @@ export default function ChatDashboard() {
                 </div>
               </div>
 
+              {/* Messages Container */}
               <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
                  <div className="text-center text-muted-foreground text-xs bg-background/80 py-1.5 px-3 rounded-lg w-fit mx-auto mb-4 border border-border">Messages are securely managed by BaseKey Meta API.</div>
                  
@@ -216,12 +304,12 @@ export default function ChatDashboard() {
                      <div className={`hidden group-hover:flex items-center gap-2 mb-1 ${msg.sender === "me" ? "pr-2" : "pl-2"}`}>
                         <Smile className="w-4 h-4 text-muted-foreground hover:text-white cursor-pointer" />
                         <Reply className="w-4 h-4 text-muted-foreground hover:text-white cursor-pointer" onClick={() => setReplyingTo(msg)} />
+                        {/* DELETION TRIGGER */}
                         <Trash2 className="w-4 h-4 text-red-500 hover:text-red-400 cursor-pointer" onClick={() => handleDeleteMessage(msg.id)} />
                      </div>
 
                      <div className={`px-4 py-2 rounded-2xl shadow-sm text-sm flex flex-col min-w-[80px] ${msg.sender === "me" ? "bg-primary text-primary-foreground rounded-tr-sm" : "bg-card text-card-foreground border border-border rounded-tl-sm"}`}>
                        
-                       {/* Agar is message ne kisi aur ko reply kiya hai */}
                        {msg.replyTo && (
                          <div className="bg-black/20 rounded-lg p-2 mb-2 text-xs border-l-4 border-white/50 opacity-80 line-clamp-2">
                            {msg.replyTo}
@@ -234,7 +322,6 @@ export default function ChatDashboard() {
                      <div className="flex items-center gap-1 mt-1 px-1">
                        <span className="text-[10px] text-muted-foreground">{msg.time}</span>
                        
-                       {/* TICKS SYSTEM: Single, Double, Blue */}
                        {msg.sender === "me" && (
                          <>
                            {msg.status === "sent" && <Check className="w-3.5 h-3.5 text-muted-foreground" />}
@@ -248,10 +335,9 @@ export default function ChatDashboard() {
                  <div ref={chatEndRef} />
               </div>
 
-              {/* Chat Input Area (With Reply Context Box) */}
+              {/* Chat Input Area */}
               <div className="bg-card/90 backdrop-blur-md border-t border-border flex flex-col">
                 
-                {/* Reply Preview Box */}
                 {replyingTo && (
                   <div className="flex items-center justify-between p-3 bg-secondary/50 border-b border-border m-2 mb-0 rounded-xl">
                     <div className="flex flex-col overflow-hidden">
