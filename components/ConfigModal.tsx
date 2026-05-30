@@ -18,20 +18,17 @@ export default function ConfigModal({ isOpen, onClose, onSuccess }: ConfigModalP
   const [verifyToken, setVerifyToken] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Jab popup khule, toh local storage se purana data nikalo
   useEffect(() => {
     if (isOpen) {
-      // Local Storage se data read karna
       const savedToken = localStorage.getItem("metaAccessToken") || "";
-      const savedPhone = localStorage.getItem("metaPhoneId") || "";
-      const savedWaba = localStorage.getItem("metaWabaId") || "";
+      const savedPhone = localStorage.getItem("phoneId") || ""; // Name updated
+      const savedWaba = localStorage.getItem("wabaId") || "";   // Name updated
       const savedVerifyToken = localStorage.getItem("webhookVerifyToken");
 
       setAccessToken(savedToken);
       setPhoneId(savedPhone);
       setWabaId(savedWaba);
 
-      // Agar pehle se token generate kiya tha toh wahi dikhao, warna naya banao
       if (savedVerifyToken) {
         setVerifyToken(savedVerifyToken);
       } else {
@@ -43,6 +40,7 @@ export default function ConfigModal({ isOpen, onClose, onSuccess }: ConfigModalP
 
   if (!isOpen) return null;
 
+  // Dhyan de: Agar aapka domain future mein change ho, toh isko update karna mat bhoolna
   const webhookUrl = "https://ri-music.vercel.app/api/webhook";
 
   const handleSaveConfig = async () => {
@@ -53,24 +51,23 @@ export default function ConfigModal({ isOpen, onClose, onSuccess }: ConfigModalP
 
     setLoading(true);
     try {
-      // 1. Browser ke Local Storage mein save karo (taki agali baar auto-fill ho jaye)
       localStorage.setItem("metaAccessToken", accessToken);
-      localStorage.setItem("metaPhoneId", phoneId);
-      localStorage.setItem("metaWabaId", wabaId);
+      localStorage.setItem("phoneId", phoneId);
+      localStorage.setItem("wabaId", wabaId);
       localStorage.setItem("webhookVerifyToken", verifyToken);
 
       const user = auth.currentUser;
       if (user) {
-        // 2. Firebase Cloud DB mein save karo
+        // Yahan 'phoneId' aur 'accessToken' exact wahi naam hain jo 'page.tsx' aur webhook ko chahiye
         await set(ref(database, `users/${user.uid}/config`), {
           isMatched: true,
-          metaAccessToken: accessToken,
-          metaPhoneId: phoneId,
-          metaWabaId: wabaId,
+          accessToken: accessToken,
+          phoneId: phoneId,
+          wabaId: wabaId,
           webhookVerifyToken: verifyToken,
           webhookUrl: webhookUrl,
           configuredAt: new Date().toISOString(),
-          isWebhookVerified: false // Default false, jab Meta API ping karega tab ise True karenge
+          isWebhookVerified: false 
         });
         
         onSuccess(); 
