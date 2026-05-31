@@ -1,6 +1,22 @@
 import { NextResponse } from "next/server";
-import { database } from "../../../lib/firebase";
-import { ref, push, set, query, orderByChild, equalTo, get, update } from "firebase/database";
+import * as admin from "firebase-admin";
+
+// ─── Initialize Firebase Admin ───
+if (!admin.apps.length) {
+  try {
+    // .env से सर्विस अकाउंट JSON को पार्स कर रहे हैं
+    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY as string);
+    
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount),
+      databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL,
+    });
+  } catch (error) {
+    console.error("Firebase Admin Initialization Error. Check your FIREBASE_SERVICE_ACCOUNT_KEY:", error);
+  }
+}
+
+const db = admin.database();
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
@@ -25,17 +41,16 @@ export async function POST(req: Request) {
 
       const phoneId = changes.metadata?.phone_number_id;
 
-      // A. RECEIVED MESSAGE LOGIC
+      // ─── A. RECEIVED MESSAGE LOGIC ───
       if (changes.messages) {
         const message = changes.messages[0];
         const senderPhone = message.from;
         const senderName = changes.contacts?.[0]?.profile?.name || senderPhone;
         const messageText = message.text?.body || "[Media]";
 
-        // Save Message
-        const chatRef = ref(database, `chats/${phoneId}/${senderPhone}/messages`);
-        const newMessageRef = push(chatRef);
-        await set(newMessageRef, {
+        // Save Message (Admin SDK syntax)
+        const chatRef = db.ref(`chats/${phoneId}/${senderPhone}/messages`);
+        await chatRef.push({
           metaId: message.id, // Important: Meta ka ID yahan store karo
           text: messageText,
           sender: "them",
@@ -44,12 +59,12 @@ export async function POST(req: Request) {
           status: "received"
         });
 
-        // Update Info (Unread Count increment)
-        const infoRef = ref(database, `chats/${phoneId}/${senderPhone}/info`);
-        const infoSnap = await get(infoRef);
+        // Update Info (Unread Count increment) (Admin SDK syntax)
+        const infoRef = db.ref(`chats/${phoneId}/${senderPhone}/info`);
+        const infoSnap = await infoRef.once("value");
         const currentUnread = infoSnap.exists() ? (infoSnap.val().unread || 0) : 0;
 
-        await set(infoRef, {
+        await infoRef.set({
           name: senderName,
           phoneNumber: senderPhone,
           lastMessage: messageText,
@@ -58,21 +73,20 @@ export async function POST(req: Request) {
         });
       }
 
-      // B. STATUS UPDATE LOGIC (Ticks)
+      // ─── B. STATUS UPDATE LOGIC (Ticks) ───
       if (changes.statuses) {
         const statusObj = changes.statuses[0];
         const recipientPhone = statusObj.recipient_id;
         const metaId = statusObj.id;
         const newStatus = statusObj.status; // 'sent', 'delivered', 'read'
 
-        // Firebase mein us message ko dhoondo jiska metaId match kare
-        const messagesRef = ref(database, `chats/${phoneId}/${recipientPhone}/messages`);
-        const q = query(messagesRef, orderByChild("metaId"), equalTo(metaId));
-        const snapshot = await get(q);
+        // Firebase mein us message ko dhoondo jiska metaId match kare (Admin SDK syntax)
+        const messagesRef = db.ref(`chats/${phoneId}/${recipientPhone}/messages`);
+        const snapshot = await messagesRef.orderByChild("metaId").equalTo(metaId).once("value");
 
         if (snapshot.exists()) {
           snapshot.forEach((childSnapshot) => {
-            update(childSnapshot.ref, { status: newStatus });
+            childSnapshot.ref.update({ status: newStatus });
           });
           console.log(`✅ Status updated to ${newStatus} for message ${metaId}`);
         }
