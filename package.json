@@ -26,6 +26,7 @@
     "clsx": "^2.1.1",
     "date-fns": "^3.6.0",
     "firebase": "^10.12.2",
+    "firebase-admin": "^12.1.1",
     "framer-motion": "^11.2.6",
     "immer": "^10.1.1",
     "lucide-react": "^0.379.0",
