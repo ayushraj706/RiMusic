@@ -500,8 +500,8 @@ export default function ChatDashboard() {
             }}
           />
 
-          {activeContact ? (
-            <div className="flex flex-col h-full z-10 w-full relative">
+                    {activeContact ? (
+            <div id="mobile-chat-view" className="flex flex-col h-full z-10 w-full relative">
 
               {/* Chat Header */}
               {selectedMessages.size > 0 ? (
@@ -627,7 +627,7 @@ export default function ChatDashboard() {
               </div>
 
               {/* Chat Input */}
-              <ChatInput
+                            <ChatInput
                 inputText={inputText}
                 setInputText={setInputText}
                 onSend={handleSendMessage}
@@ -636,6 +636,10 @@ export default function ChatDashboard() {
                 replyingTo={replyingTo ? { text: replyingTo.text, sender: replyingTo.sender } : null}
                 onCancelReply={() => setReplyingTo(null)}
                 activeContactName={activeContact.name}
+                // 👇 ये 3 लाइनें नई जोड़नी हैं
+                phoneId={phoneId}
+                accessToken={accessToken}
+                recipientPhone={activeContact.phoneNumber}
               />
             </div>
           ) : (
