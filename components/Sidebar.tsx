@@ -50,7 +50,7 @@ export default function Sidebar() {
 
   if (loading) {
     return (
-      <div className="fixed bottom-0 left-0 z-50 w-full h-16 border-t border-gray-200 bg-white flex items-center justify-center md:static md:w-20 md:h-screen md:border-t-0 md:border-r">
+      <div className="fixed bottom-0 left-0 z-30 w-full h-16 border-t border-gray-200 bg-white flex items-center justify-center md:static md:w-20 md:h-full md:border-t-0 md:border-r">
         <Loader2 className="w-6 h-6 animate-spin text-[#25D366]" />
       </div>
     );
@@ -68,9 +68,9 @@ export default function Sidebar() {
   return (
     <>
       {/* ============================================ */}
-      {/* DESKTOP SIDEBAR - Sticky, takes exact 20 width */}
+      {/* DESKTOP SIDEBAR - Relative & h-full to prevent overflow */}
       {/* ============================================ */}
-      <aside className="hidden md:flex flex-col sticky top-0 h-screen w-20 shrink-0 bg-white border-r border-gray-200 z-50">
+      <aside className="hidden md:flex flex-col relative h-full w-20 min-w-[80px] shrink-0 bg-white border-r border-gray-200 z-40">
         {/* Top Section - Navigation */}
         <div className="flex-1 flex flex-col items-center py-6 gap-2 overflow-y-auto no-scrollbar">
           {isMatched ? (
@@ -154,9 +154,9 @@ export default function Sidebar() {
       </aside>
 
       {/* ============================================ */}
-      {/* MOBILE BOTTOM BAR - Fixed bottom */}
+      {/* MOBILE BOTTOM BAR - Lowered z-index to 30 */}
       {/* ============================================ */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200 shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-gray-200 shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
         <div className="flex items-center justify-around h-16 px-2">
           {isMatched ? (
             <>
