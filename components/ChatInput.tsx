@@ -12,6 +12,11 @@ interface ChatInputProps {
   replyingTo?: { text: string; sender: string } | null;
   onCancelReply?: () => void;
   activeContactName?: string;
+  
+  // 👇 TypeScript एरर को फिक्स करने के लिए जोड़े गए नए Props
+  phoneId?: string | null;
+  accessToken?: string | null;
+  recipientPhone?: string;
 }
 
 export default function ChatInput({
@@ -23,6 +28,9 @@ export default function ChatInput({
   replyingTo,
   onCancelReply,
   activeContactName = "Contact",
+  phoneId,
+  accessToken,
+  recipientPhone,
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [showMediaMenu, setShowMediaMenu] = useState(false);
