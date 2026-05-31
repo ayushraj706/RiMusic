@@ -7,8 +7,6 @@ import {
   Save,
   Download,
   RotateCcw,
-  Eye,
-  Share2,
   ChevronDown,
   Cpu,
   Wifi,
@@ -18,11 +16,11 @@ import {
   Menu,
   X,
 } from "lucide-react";
-import { useChatbotStore } from "@/store/useChatbotStore";
+import { useChatbotStore } from "../../store/useChatbotStore";
 
 // Dynamic import to avoid SSR issues with React Flow
 const ChatbotCanvas = dynamic(
-  () => import("@/components/chatbot/ChatbotCanvas"),
+  () => import("../../components/chatbot/ChatbotCanvas"),
   { ssr: false, loading: () => <CanvasLoader /> }
 );
 
