@@ -1,7 +1,8 @@
 "use client";
 
-import { ReactFlow, Background, Controls, addEdge, useNodesState, useEdgesState } from '@xyflow/react';
-import ReactFlow, {
+import React, { useState, useCallback, useRef, useEffect } from "react";
+import {
+  ReactFlow,
   Background,
   Controls,
   MiniMap,
@@ -22,11 +23,11 @@ import {
   ChevronRight,
   Menu,
 } from "lucide-react";
-import { useChatbotStore } from "@/store/useChatbotStore";
+import { useChatbotStore } from "../../store/useChatbotStore";
 import ButtonNode from "./nodes/ButtonNode";
 import { TextNode, ListNode, MediaNode } from "./nodes/OtherNodes";
 import PropertiesPanel from "./PropertiesPanel";
-import type { WhatsAppNodeData } from "@/store/useChatbotStore";
+import type { WhatsAppNodeData } from "../../store/useChatbotStore";
 
 // ─── Node type map ────────────────────────────────────────────────────────────
 
@@ -162,7 +163,7 @@ function Canvas() {
   const addNode = useChatbotStore((s) => s.addNode);
   const setSelectedNodeId = useChatbotStore((s) => s.setSelectedNodeId);
 
-  React.useEffect(() => {
+  useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768);
     check();
     window.addEventListener("resize", check);
