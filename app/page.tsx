@@ -782,20 +782,17 @@ export default function ChatDashboard() {
           ${!activeContact ? "hidden md:flex" : "flex"}
           flex-1 h-full flex-col relative bg-[#E5DDD5]
         `}>
-          {/* Chat Background */}
+                    {/* Chat Background */}
           <div
             className="absolute inset-0 z-0 opacity-60"
             style={{
-              backgroundColor: chatTheme.bgColor || "#E5DDD5",
-              backgroundImage: chatTheme.pattern
-                ? `${chatTheme.pattern}, ${chatTheme.bgImage ? `url(${chatTheme.bgImage})` : "none"}`
-                : chatTheme.bgImage
-                ? `url(${chatTheme.bgImage})`
-                : "none",
-              backgroundSize: chatTheme.pattern ? "20px 20px, auto" : "auto",
-              backgroundRepeat: "repeat",
+              backgroundColor: "#E5DDD5",
+              backgroundImage: chatTheme.bgUrl ? `url(${chatTheme.bgUrl})` : "none",
+              backgroundSize: "cover",
+              backgroundPosition: "center",
             }}
           />
+
 
           {activeContact ? (
             <div id="mobile-chat-view" className="flex flex-col h-full z-10 w-full relative">
