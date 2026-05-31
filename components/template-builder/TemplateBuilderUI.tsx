@@ -1,6 +1,11 @@
 "use client";
 
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useMemo, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { auth, database } from "../../lib/firebase"; 
+import { onAuthStateChanged } from "firebase/auth";
+import { ref, onValue } from "firebase/database";
+
 import { 
   Image as ImageIcon, 
   Video, 
@@ -16,7 +21,10 @@ import {
   Type,
   PanelBottom,
   Send,
-  Loader2
+  Loader2,
+  ArrowLeft,
+  Plus,
+  RefreshCw
 } from "lucide-react";
 
 // ─── Type Imports ─────────────────────────────────────────────────────────────
@@ -143,12 +151,10 @@ function PhoneMockup({ form }: { form: FormState }) {
       <div className="bg-[#1C1C1E] rounded-[45px] p-2.5 shadow-2xl shadow-gray-300/50 border-[3px] border-[#3A3A3C] ring-[1px] ring-gray-200">
         <div className="bg-[#EFEAE2] relative w-full h-[560px] rounded-[36px] overflow-hidden flex flex-col border-[4px] border-black">
           
-          {/* Dynamic Island / Notch */}
           <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[90px] h-[26px] bg-black rounded-b-[18px] z-20 flex justify-center items-center">
             <div className="w-[40px] h-[5px] bg-gray-800 rounded-full"></div>
           </div>
 
-          {/* iOS Status Bar */}
           <div className="bg-[#075E54] pt-[30px] pb-2 px-4 flex items-center gap-2.5 z-10 shadow-md">
             <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center border border-white/30 text-white">
               <Bot className="w-5 h-5" />
@@ -161,10 +167,7 @@ function PhoneMockup({ form }: { form: FormState }) {
             </div>
           </div>
 
-          {/* Chat Background */}
           <div className="flex-1 px-3 py-4 bg-[url('https://w0.peakpx.com/wallpaper/818/148/HD-wallpaper-whatsapp-background-cool-dark-green-light-pattern-texture.jpg')] bg-cover bg-center overflow-y-auto">
-            
-            {/* Meta Official WhatsApp Bubble */}
             {(form.bodyText || form.headerFormat !== "NONE" || form.footerText) ? (
               <div className="w-[210px] flex flex-col">
                 <div className="bg-white rounded-xl rounded-tl-none shadow-sm overflow-hidden relative">
@@ -191,7 +194,6 @@ function PhoneMockup({ form }: { form: FormState }) {
                     </div>
                   </div>
 
-                  {/* Official Meta Interactive Buttons */}
                   {hasButtons && (
                     <div className="border-t border-gray-200 bg-white">
                       {form.buttons.map((btn, i) => (
@@ -220,14 +222,9 @@ function PhoneMockup({ form }: { form: FormState }) {
             )}
           </div>
 
-          {/* iOS Bottom Bar */}
           <div className="bg-[#F0F0F0] px-3 py-2 pb-5 flex items-center gap-2">
-            <div className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-gray-500 text-lg">
-              +
-            </div>
-            <div className="flex-1 bg-white border border-gray-300 rounded-full px-3 py-1.5 text-xs text-gray-400 shadow-sm">
-              Message
-            </div>
+            <div className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-gray-500 text-lg">+</div>
+            <div className="flex-1 bg-white border border-gray-300 rounded-full px-3 py-1.5 text-xs text-gray-400 shadow-sm">Message</div>
             <div className="w-8 h-8 rounded-full bg-[#00A884] flex items-center justify-center text-white shadow-sm">
               <Send className="w-4 h-4 ml-0.5" />
             </div>
@@ -238,8 +235,8 @@ function PhoneMockup({ form }: { form: FormState }) {
   );
 }
 
-// ─── Main Template Builder UI ─────────────────────────────────────────────────
-export function TemplateBuilderUI({ onSave }: { onSave?: (data: any) => Promise<void> | void }) {
+// ─── Sub-Component: Create Form UI ────────────────────────────────────────────
+function CreateTemplateForm({ onSave, onBack }: { onSave: (data: CreateTemplatePayload) => Promise<void>, onBack: () => void }) {
   const [form, setForm] = useState<FormState>({
     name: "",
     category: TemplateCategory.MARKETING,
@@ -284,23 +281,11 @@ export function TemplateBuilderUI({ onSave }: { onSave?: (data: any) => Promise<
     setField("bodyText", form.bodyText + `{{${next}}}`);
   };
 
-  // ─── Backend Integration Logic ───
   const handleSubmit = async () => {
     if (!validation.isValid) return;
-    
     setIsSubmitting(true);
-    
     try {
-      // Agar page.tsx se onSave function pass kiya gaya hai, toh payload backend ko bhej do
-      if (onSave) {
-        await onSave(payload);
-      } else {
-        // Fallback for testing (agar onSave nahi hai)
-        console.log("Submitting Payload to Meta API Endpoint:", payload);
-        await new Promise((r) => setTimeout(r, 1500)); 
-      }
-    } catch (error) {
-      console.error("Error saving template:", error);
+      await onSave(payload);
     } finally {
       setIsSubmitting(false);
     }
@@ -311,9 +296,11 @@ export function TemplateBuilderUI({ onSave }: { onSave?: (data: any) => Promise<
 
   return (
     <div className="min-h-screen bg-[#F4F7F6] text-gray-900 font-sans flex flex-col">
-      {/* Navbar (Light Theme) */}
       <header className="sticky top-0 z-40 bg-white border-b border-gray-200 px-6 py-3.5 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-3">
+          <button onClick={onBack} className="p-2 mr-1 hover:bg-gray-100 rounded-full transition-colors">
+            <ArrowLeft className="w-5 h-5 text-gray-700" />
+          </button>
           <div className="w-8 h-8 rounded-lg bg-[#25D366] flex items-center justify-center shadow-md">
             <Bot className="w-5 h-5 text-white" />
           </div>
@@ -343,7 +330,6 @@ export function TemplateBuilderUI({ onSave }: { onSave?: (data: any) => Promise<
       <div className="flex flex-col lg:flex-row flex-1 overflow-hidden">
         {/* Left Form Panel */}
         <div className="flex-1 overflow-y-auto px-4 lg:px-8 py-6 space-y-5 pb-20">
-          
           <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
             <h2 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-4 flex items-center gap-2">
               <FileText className="w-4 h-4 text-[#25D366]" /> Identity
@@ -400,7 +386,6 @@ export function TemplateBuilderUI({ onSave }: { onSave?: (data: any) => Promise<
             {fieldError("components.BODY") && <p className="text-red-500 text-xs mt-1 font-medium">{fieldError("components.BODY")}</p>}
           </div>
 
-          {/* New Footer Section Added Back */}
           <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
             <h2 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-4 flex items-center gap-2">
               <PanelBottom className="w-4 h-4 text-[#25D366]" /> Footer <span className="normal-case font-medium text-gray-400 tracking-normal">(Optional)</span>
@@ -411,7 +396,6 @@ export function TemplateBuilderUI({ onSave }: { onSave?: (data: any) => Promise<
             </div>
           </div>
 
-          {/* Interactive Buttons Section with Official Icons */}
           <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
             <h2 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-4 flex items-center gap-2">
               <CornerUpLeft className="w-4 h-4 text-[#25D366]" /> Buttons <span className="normal-case font-medium text-gray-400 tracking-normal">(Interactive)</span>
@@ -471,4 +455,186 @@ export function TemplateBuilderUI({ onSave }: { onSave?: (data: any) => Promise<
   );
 }
 
-export default TemplateBuilderUI;
+// ─── MAIN EXPORT: Handles Navigation, Firebase & List View ────────────────────
+export default function TemplateBuilderUI() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const currentStep = searchParams.get("step") || "list"; 
+
+  // Firebase State
+  const [wabaId, setWabaId] = useState<string | null>(null);
+  const [accessToken, setAccessToken] = useState<string | null>(null);
+  
+  // List State
+  const [templates, setTemplates] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState("");
+
+  // 1. Fetch Firebase Config
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      if (currentUser) {
+        const configRef = ref(database, `users/${currentUser.uid}/config`);
+        onValue(configRef, (snapshot) => {
+          if (snapshot.exists() && snapshot.val().isMatched) {
+            setWabaId(snapshot.val().wabaId);
+            setAccessToken(snapshot.val().accessToken);
+          } else {
+            setErrorMsg("Please link your Meta API in Settings first.");
+            setLoading(false);
+          }
+        });
+      } else {
+        router.push("/login");
+      }
+    });
+    return () => unsubscribe();
+  }, [router]);
+
+  // 2. Fetch Real Templates List
+  const fetchTemplates = useCallback(async () => {
+    if (!wabaId || !accessToken) return;
+    setLoading(true);
+    try {
+      const response = await fetch(
+        `https://graph.facebook.com/v21.0/${wabaId}/message_templates`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      const result = await response.json();
+      
+      if (result.data) {
+        setTemplates(result.data);
+      } else if (result.error) {
+        setErrorMsg(result.error.message);
+      }
+    } catch (error) {
+      setErrorMsg("Failed to connect to Meta servers.");
+    } finally {
+      setLoading(false);
+    }
+  }, [wabaId, accessToken]);
+
+  useEffect(() => {
+    if (currentStep === "list" && wabaId && accessToken) {
+      fetchTemplates();
+    }
+  }, [currentStep, wabaId, accessToken, fetchTemplates]);
+
+  // 3. Post to Meta API (Called from inside Create Form)
+  const handleSaveTemplateToMeta = async (payload: CreateTemplatePayload) => {
+    if (!wabaId || !accessToken) return;
+    try {
+      const response = await fetch(
+        `https://graph.facebook.com/v21.0/${wabaId}/message_templates`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        }
+      );
+      const data = await response.json();
+      
+      if (data.error) {
+        alert("Meta Error: " + data.error.message);
+      } else {
+        alert("Template successfully submitted to Meta!");
+        router.back(); // Go back to List
+      }
+    } catch (error) {
+      alert("Network Error: Failed to submit template.");
+    }
+  };
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // RENDER: CREATE VIEW
+  if (currentStep === "create") {
+    return (
+      <CreateTemplateForm 
+        onSave={handleSaveTemplateToMeta} 
+        onBack={() => router.back()} 
+      />
+    );
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // RENDER: LIST VIEW (Default)
+  return (
+    <div className="min-h-screen bg-[#F4F7F6] text-gray-900 font-sans pb-20">
+      <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-white sticky top-0 z-10 shadow-sm">
+        <div>
+          <h1 className="text-xl font-bold text-gray-800">WhatsApp Templates</h1>
+          <p className="text-xs text-gray-500 mt-1">Manage and create official Meta templates.</p>
+        </div>
+        <button 
+          onClick={fetchTemplates}
+          disabled={!wabaId || loading}
+          className="p-2.5 text-gray-500 bg-gray-50 border border-gray-200 hover:bg-gray-100 rounded-xl disabled:opacity-50 transition"
+          title="Refresh List"
+        >
+          <RefreshCw className={`w-4 h-4 ${loading && wabaId ? "animate-spin" : ""}`} />
+        </button>
+      </div>
+
+      <div className="p-6 max-w-5xl mx-auto">
+        {errorMsg ? (
+          <div className="text-center py-10 bg-red-50 border border-red-100 rounded-xl text-red-600 font-medium">
+            <AlertCircle className="w-6 h-6 mx-auto mb-2" />
+            {errorMsg}
+          </div>
+        ) : loading ? (
+          <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+            <Loader2 className="w-8 h-8 animate-spin mb-3 text-[#25D366]" />
+            <p className="text-sm font-medium">Fetching templates from Meta...</p>
+          </div>
+        ) : templates.length === 0 ? (
+          <div className="text-center py-24 border-2 border-dashed border-gray-200 rounded-2xl bg-white shadow-sm">
+            <FileText className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+            <p className="text-gray-500 font-medium mb-4">No templates found in this Meta account.</p>
+            <button 
+              onClick={() => router.push("?step=create")}
+              className="bg-[#25D366] hover:bg-[#1DA851] text-white px-5 py-2 rounded-lg font-bold text-sm shadow-sm transition"
+            >
+              Create First Template
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {templates.map((tpl: any) => (
+              <div key={tpl.id} className="border border-gray-200 rounded-2xl p-5 hover:shadow-md transition-shadow bg-white flex flex-col justify-between">
+                <div>
+                  <div className="flex justify-between items-start mb-3">
+                    <h3 className="font-bold text-[15px] text-gray-800 truncate pr-2" title={tpl.name}>{tpl.name}</h3>
+                    <span className={`text-[10px] px-2 py-1 rounded-full font-bold tracking-wide uppercase flex-shrink-0 ${
+                      tpl.status === "APPROVED" ? "bg-[#ECFDF5] text-[#065F46] border border-[#A7F3D0]" : 
+                      tpl.status === "REJECTED" ? "bg-[#FEF2F2] text-[#991B1B] border border-[#FCA5A5]" : 
+                      "bg-[#FFFBEB] text-[#B45309] border border-[#FDE68A]"
+                    }`}>
+                      {tpl.status || "PENDING"}
+                    </span>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs text-gray-500">Category: <span className="font-semibold text-gray-700">{tpl.category}</span></p>
+                    <p className="text-xs text-gray-500">Language: <span className="font-semibold text-gray-700">{tpl.language}</span></p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Floating Action Button */}
+      <button 
+        onClick={() => router.push("?step=create")}
+        disabled={!wabaId}
+        className="fixed bottom-6 right-6 bg-[#25D366] text-white p-4 rounded-full shadow-[0_8px_20px_rgba(37,211,102,0.3)] hover:bg-[#1DA851] hover:-translate-y-1 transition-all z-20 flex items-center justify-center disabled:opacity-50 disabled:hover:translate-y-0"
+        title="Create New Template"
+      >
+        <Plus className="w-6 h-6" />
+      </button>
+    </div>
+  );
+}
