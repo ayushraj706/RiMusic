@@ -6,7 +6,7 @@ import { MessageSquare, Zap, ChevronRight } from "lucide-react";
 import { type ButtonNodeData } from "@/store/useChatbotStore";
 
 const ButtonNode = memo(({ data, selected }: NodeProps) => {
-  const nodeData = data as ButtonNodeData;
+const nodeData = data as unknown as ButtonNodeData;
 
   return (
     <div
