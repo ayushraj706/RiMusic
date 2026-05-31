@@ -11,7 +11,9 @@ export async function POST(request: Request): Promise<NextResponse> {
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File;
-    const resourceType = (formData.get('resource_type') as string) || 'auto';
+    
+    // 🛠️ TypeScript Error Fix: Cloudinary strict types
+    const resourceType = ((formData.get('resource_type') as string) || 'auto') as "auto" | "video" | "image" | "raw";
 
     if (!file) {
       return NextResponse.json(
