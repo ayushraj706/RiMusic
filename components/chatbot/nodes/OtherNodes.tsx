@@ -7,12 +7,12 @@ import {
   type TextNodeData,
   type ListNodeData,
   type MediaNodeData,
-} from "@/store/useChatbotStore";
+} from "../../store/useChatbotStore";
 
 // ─── Text Node ────────────────────────────────────────────────────────────────
 
 export const TextNode = memo(({ data, selected }: NodeProps) => {
-  const nodeData = data as TextNodeData;
+  const nodeData = data as unknown as TextNodeData; // Fix applied here
 
   return (
     <div
@@ -83,7 +83,7 @@ TextNode.displayName = "TextNode";
 // ─── List Node ────────────────────────────────────────────────────────────────
 
 export const ListNode = memo(({ data, selected }: NodeProps) => {
-  const nodeData = data as ListNodeData;
+  const nodeData = data as unknown as ListNodeData; // Fix applied here
   const totalRows = (nodeData.sections || []).reduce(
     (acc, s) => acc + (s.rows?.length || 0),
     0
@@ -164,7 +164,7 @@ ListNode.displayName = "ListNode";
 // ─── Media Node ───────────────────────────────────────────────────────────────
 
 export const MediaNode = memo(({ data, selected }: NodeProps) => {
-  const nodeData = data as MediaNodeData;
+  const nodeData = data as unknown as MediaNodeData; // Fix applied here
 
   const iconMap = {
     image: <Image className="w-3.5 h-3.5 text-amber-400" />,
