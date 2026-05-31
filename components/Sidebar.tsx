@@ -68,9 +68,9 @@ export default function Sidebar() {
   return (
     <>
       {/* ============================================ */}
-      {/* DESKTOP SIDEBAR - Left side, full height */}
+      {/* DESKTOP SIDEBAR - Sticky, takes exact 20 width */}
       {/* ============================================ */}
-      <aside className="hidden md:flex flex-col fixed left-0 top-0 h-screen w-20 bg-white border-r border-gray-200 z-50">
+      <aside className="hidden md:flex flex-col sticky top-0 h-screen w-20 shrink-0 bg-white border-r border-gray-200 z-50">
         {/* Top Section - Navigation */}
         <div className="flex-1 flex flex-col items-center py-6 gap-2 overflow-y-auto no-scrollbar">
           {isMatched ? (
