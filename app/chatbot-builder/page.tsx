@@ -369,7 +369,7 @@ export default function ChatbotBuilderPage() {
           <ChatbotCanvas />
         ) : (
           <div className="h-full overflow-y-auto w-full bg-slate-950 p-4 md:p-6">
-            <TemplateBuilderUI onSave={(data) => console.log("Template Data:", data)} />
+            <TemplateBuilderUI />
           </div>
         )}
       </main>
