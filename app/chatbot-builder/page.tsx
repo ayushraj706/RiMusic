@@ -16,12 +16,15 @@ import {
   Menu,
   X,
   Check,
+  Bot,
+  FileText,
 } from "lucide-react";
 import { useChatbotStore } from "@/store/useChatbotStore";
+import { TemplateBuilderUI } from "@/components/template-builder/TemplateBuilderUI";
 
-// Dynamic import to avoid SSR issues with React Flow
+// Dynamic import with fixed path using @/ alias to avoid path issues
 const ChatbotCanvas = dynamic(
-  () => import("./ChatbotCanvas"),
+  () => import("@/components/chatbot/ChatbotCanvas"),
   { ssr: false, loading: () => <CanvasLoader /> }
 );
 
@@ -106,12 +109,13 @@ function JsonModal({
 
 // ─── Main UI Component ────────────────────────────────────────────────────────
 
-export default function ChatbotBuilderUI() {
+export default function ChatbotBuilderPage() {
   const exportFlowAsJSON = useChatbotStore((s) => s.exportFlowAsJSON);
   const resetFlow = useChatbotStore((s) => s.resetFlow);
   const nodes = useChatbotStore((s) => s.nodes);
   const edges = useChatbotStore((s) => s.edges);
 
+  const [activeTab, setActiveTab] = useState<"canvas" | "template">("canvas");
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [showJson, setShowJson] = useState(false);
   const [jsonData, setJsonData] = useState<object | null>(null);
@@ -119,15 +123,18 @@ export default function ChatbotBuilderUI() {
 
   const handleSave = useCallback(async () => {
     setSaveStatus("saving");
-    const json = exportFlowAsJSON();
-
-    // TODO: Replace with actual Firebase API call
-    console.log("Saving to Database:", json);
+    
+    if (activeTab === "canvas") {
+      const json = exportFlowAsJSON();
+      console.log("Saving Canvas Flow to Database:", json);
+    } else {
+      console.log("Saving Template...");
+    }
 
     await new Promise((r) => setTimeout(r, 900)); // Simulate API delay
     setSaveStatus("saved");
     setTimeout(() => setSaveStatus("idle"), 2500);
-  }, [exportFlowAsJSON]);
+  }, [exportFlowAsJSON, activeTab]);
 
   const handleExport = useCallback(() => {
     const json = exportFlowAsJSON();
@@ -144,7 +151,7 @@ export default function ChatbotBuilderUI() {
     const a = document.createElement("a");
     a.href = url;
     a.download = `basekey-flow-${Date.now()}.json`;
-    document.body.appendChild(a); // Required for Firefox
+    document.body.appendChild(a); 
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
@@ -186,26 +193,47 @@ export default function ChatbotBuilderUI() {
           </div>
         </div>
 
-        {/* Node/Edge Stats */}
-        <div className="hidden lg:flex items-center gap-5 px-4 py-1.5 bg-slate-950/50 rounded-lg border border-slate-800/50">
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-green-400 shadow-[0_0_8px_rgba(74,222,128,0.4)]" />
-            <span className="text-xs font-medium text-slate-400">
-              <strong className="text-slate-200">{nodes.length}</strong> nodes
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.4)]" />
-            <span className="text-xs font-medium text-slate-400">
-              <strong className="text-slate-200">{edges.length}</strong> connections
-            </span>
-          </div>
+        {/* Tab Switcher (Desktop) */}
+        <div className="hidden lg:flex bg-slate-950/50 rounded-lg p-1 border border-slate-800/50">
+          <button 
+            onClick={() => setActiveTab("canvas")}
+            className={`flex items-center gap-2 px-4 py-1.5 text-xs font-medium rounded-md transition-all ${
+              activeTab === "canvas" 
+                ? "bg-slate-800 text-white shadow-sm" 
+                : "text-slate-500 hover:text-slate-300"
+            }`}>
+            <Bot className="w-3.5 h-3.5" /> Visual Flow
+          </button>
+          <button 
+            onClick={() => setActiveTab("template")}
+            className={`flex items-center gap-2 px-4 py-1.5 text-xs font-medium rounded-md transition-all ${
+              activeTab === "template" 
+                ? "bg-green-500/10 text-green-400 shadow-sm" 
+                : "text-slate-500 hover:text-slate-300"
+            }`}>
+            <FileText className="w-3.5 h-3.5" /> Template Builder
+          </button>
         </div>
 
         {/* Actions */}
         <div className="flex items-center gap-2.5">
           {/* Desktop Actions */}
           <div className="hidden md:flex items-center gap-2">
+            
+            {/* Show stats only in Canvas mode */}
+            {activeTab === "canvas" && (
+              <div className="flex items-center gap-4 px-3 py-1.5 bg-slate-950/50 rounded-lg border border-slate-800/50 mr-2">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-2 h-2 rounded-full bg-green-400" />
+                  <span className="text-[11px] font-medium text-slate-400">{nodes.length} nodes</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-2 h-2 rounded-full bg-blue-400" />
+                  <span className="text-[11px] font-medium text-slate-400">{edges.length} connections</span>
+                </div>
+              </div>
+            )}
+
             <button
               onClick={handleReset}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-red-400 hover:bg-slate-800/80 rounded-lg transition-all duration-200 border border-transparent hover:border-red-900/30"
@@ -256,7 +284,7 @@ export default function ChatbotBuilderUI() {
                 ? "Saving…"
                 : saveStatus === "saved"
                 ? "Saved!"
-                : "Save Flow"}
+                : "Save"}
             </button>
           </div>
 
@@ -291,10 +319,28 @@ export default function ChatbotBuilderUI() {
       {/* Mobile Dropdown Menu */}
       <div 
         className={`md:hidden absolute top-[57px] left-0 right-0 bg-slate-900 border-b border-slate-800 shadow-2xl z-10 overflow-hidden transition-all duration-300 ease-in-out ${
-          mobileMenuOpen ? "max-h-[300px] opacity-100" : "max-h-0 opacity-0"
+          mobileMenuOpen ? "max-h-[400px] opacity-100" : "max-h-0 opacity-0"
         }`}
       >
         <div className="flex flex-col p-3 gap-1.5">
+          {/* Mobile Tabs */}
+          <div className="flex bg-slate-950/50 rounded-lg p-1 border border-slate-800/50 mb-2">
+            <button 
+              onClick={() => { setActiveTab("canvas"); setMobileMenuOpen(false); }}
+              className={`flex-1 flex justify-center items-center gap-2 px-4 py-2 text-xs font-medium rounded-md ${
+                activeTab === "canvas" ? "bg-slate-800 text-white" : "text-slate-500"
+              }`}>
+              <Bot className="w-4 h-4" /> Flow
+            </button>
+            <button 
+              onClick={() => { setActiveTab("template"); setMobileMenuOpen(false); }}
+              className={`flex-1 flex justify-center items-center gap-2 px-4 py-2 text-xs font-medium rounded-md ${
+                activeTab === "template" ? "bg-green-500/10 text-green-400" : "text-slate-500"
+              }`}>
+              <FileText className="w-4 h-4" /> Templates
+            </button>
+          </div>
+
           <button
             onClick={() => { handleExport(); setMobileMenuOpen(false); }}
             className="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-slate-300 hover:bg-slate-800/80 rounded-xl transition-colors"
@@ -317,10 +363,15 @@ export default function ChatbotBuilderUI() {
         </div>
       </div>
 
-      {/* ── Canvas ── */}
+      {/* ── Main Content Area ── */}
       <main className="flex-1 relative overflow-hidden bg-[#0a0f1c]">
-        {/* Canvas will take full space */}
-        <ChatbotCanvas />
+        {activeTab === "canvas" ? (
+          <ChatbotCanvas />
+        ) : (
+          <div className="h-full overflow-y-auto w-full bg-slate-950 p-4 md:p-6">
+            <TemplateBuilderUI onSave={(data) => console.log("Template Data:", data)} />
+          </div>
+        )}
       </main>
 
       {/* ── Status Bar (Footer) ── */}
@@ -329,7 +380,7 @@ export default function ChatbotBuilderUI() {
           <div className="flex items-center gap-2 opacity-80">
             <Cpu className="w-3.5 h-3.5 text-slate-500" />
             <span className="text-[11px] font-medium text-slate-400">
-              WhatsApp Business API · Interactive Messages Engine
+              WhatsApp Business API · {activeTab === "canvas" ? "Interactive Messages Engine" : "Template Creation Engine"}
             </span>
           </div>
         </div>
