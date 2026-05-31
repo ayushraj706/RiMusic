@@ -20,7 +20,7 @@ import {
   FileText,
 } from "lucide-react";
 import { useChatbotStore } from "@/store/useChatbotStore";
-import { TemplateBuilderUI } from "@/components/template-builder/TemplateBuilderUI";
+import TemplateBuilderUI from "@/components/template-builder/TemplateBuilderUI";
 
 // Dynamic import with fixed path using @/ alias to avoid path issues
 const ChatbotCanvas = dynamic(
