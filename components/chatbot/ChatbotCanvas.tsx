@@ -21,7 +21,6 @@ import {
   GripVertical,
   ChevronLeft,
   ChevronRight,
-  Menu,
 } from "lucide-react";
 import { useChatbotStore } from "../../store/useChatbotStore";
 import ButtonNode from "./nodes/ButtonNode";
@@ -265,9 +264,9 @@ function Canvas() {
         onDragOver={onDragOver}
         onDrop={onDrop}
       >
-        <div
-          nodes={nodes}
-          edges={edges}
+        <ReactFlow
+          nodes={nodes as any}
+          edges={edges as any}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
