@@ -2,9 +2,19 @@
 
 import { useEffect, useState } from "react";
 import { auth, database } from "../lib/firebase"; 
-import { ref, onValue, off } from "firebase/database"; // onValue import kiya
+import { ref, onValue } from "firebase/database";
 import { onAuthStateChanged } from "firebase/auth";
-import { MessageSquare, Settings, AlertCircle, CheckCircle2, Loader2, Link2 } from "lucide-react";
+import { usePathname } from "next/navigation";
+import Link from "next/link";
+import { 
+  MessageSquare, 
+  Settings, 
+  AlertCircle, 
+  CheckCircle2, 
+  Loader2, 
+  Link2,
+  Bot // <-- Naya icon Bot builder ke liye
+} from "lucide-react";
 import ConfigModal from "./ConfigModal"; 
 
 export default function Sidebar() {
@@ -12,8 +22,10 @@ export default function Sidebar() {
   const [isMatched, setIsMatched] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  
+  // Current route pata karne ke liye taaki active button highlight ho sake
+  const pathname = usePathname();
 
-  // 1. Real-time listener: Jab bhi DB mein config change ho, UI update ho jaye
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
@@ -21,13 +33,12 @@ export default function Sidebar() {
       if (currentUser) {
         const userRef = ref(database, `users/${currentUser.uid}/config`);
         
-        // onValue use kiya taaki real-time tracking ho
         const unsubscribeDB = onValue(userRef, (snapshot) => {
           setIsMatched(snapshot.exists() && snapshot.val().isMatched);
           setLoading(false);
         });
         
-        return () => unsubscribeDB(); // Cleanup
+        return () => unsubscribeDB();
       } else {
         setLoading(false);
       }
@@ -46,7 +57,6 @@ export default function Sidebar() {
 
   return (
     <>
-      {/* Sidebar Container */}
       <div className="w-20 h-full border-r border-border bg-card/50 flex flex-col items-center py-6 glassmorphism z-10 transition-all duration-300">
         
         {/* App Logo */}
@@ -58,18 +68,38 @@ export default function Sidebar() {
         <div className="flex-1 flex flex-col items-center gap-6 w-full">
           {isMatched ? (
             <>
-              {/* Active Chat Button */}
-              <div className="relative group cursor-pointer">
-                <div className="w-12 h-12 bg-primary text-primary-foreground rounded-2xl flex items-center justify-center shadow-lg transition-transform active:scale-95">
+              {/* Chat Inbox Button */}
+              <Link href="/">
+                <div 
+                  className={`relative group cursor-pointer w-12 h-12 rounded-2xl flex items-center justify-center transition-transform active:scale-95 ${
+                    pathname === "/" || pathname === "/chat" ? "bg-primary text-primary-foreground shadow-lg" : "text-muted-foreground hover:bg-white/5"
+                  }`}
+                  title="Chats"
+                >
                   <MessageSquare className="w-6 h-6" />
+                  {/* Notification Dot (Optional) */}
+                  {(pathname === "/" || pathname === "/chat") && (
+                    <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-background"></div>
+                  )}
                 </div>
-                <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-background"></div>
-              </div>
+              </Link>
+
+              {/* Chatbot Builder Button */}
+              <Link href="/chatbot-builder">
+                <div 
+                  className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-transform active:scale-95 cursor-pointer ${
+                    pathname === "/chatbot-builder" ? "bg-primary text-primary-foreground shadow-lg" : "text-muted-foreground hover:bg-white/5"
+                  }`}
+                  title="Bot Builder"
+                >
+                  <Bot className="w-6 h-6" />
+                </div>
+              </Link>
 
               {/* Settings */}
               <div 
                 onClick={() => setIsModalOpen(true)} 
-                className="w-12 h-12 text-muted-foreground rounded-2xl flex items-center justify-center hover:bg-white/5 cursor-pointer transition"
+                className="w-12 h-12 text-muted-foreground rounded-2xl flex items-center justify-center hover:bg-white/5 cursor-pointer transition mt-auto"
                 title="API Configuration"
               >
                 <Settings className="w-6 h-6" />
@@ -95,7 +125,7 @@ export default function Sidebar() {
         </div>
 
         {/* Bottom Profile */}
-        <div className="mt-auto flex flex-col items-center gap-4">
+        <div className="mt-6 flex flex-col items-center gap-4">
           {isMatched && <CheckCircle2 className="w-5 h-5 text-green-500" />}
           <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-sm font-bold border border-border overflow-hidden">
             {user?.photoURL ? (
@@ -110,7 +140,7 @@ export default function Sidebar() {
       <ConfigModal 
         isOpen={isModalOpen} 
         onClose={() => setIsModalOpen(false)} 
-        onSuccess={() => setIsModalOpen(false)} // Real-time listener handle karega update
+        onSuccess={() => setIsModalOpen(false)} 
       />
     </>
   );
