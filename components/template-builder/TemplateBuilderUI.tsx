@@ -1,6 +1,10 @@
-"use client";
 
-import React, { useState, useCallback, useMemo, useEffect } from "react";
+# Now create the COMPLETE updated TemplateBuilderUI.tsx with Cloudinary upload
+# All features: Edit, View, Category Filter, Swipe Preview, Cloudinary Media Upload
+
+template_builder_cloudinary = '''"use client";
+
+import React, { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { auth, database } from "../../lib/firebase"; 
 import { onAuthStateChanged } from "firebase/auth";
@@ -115,11 +119,11 @@ function buildPayload(form: FormState): CreateTemplatePayload {
     components.push(headerComp as HeaderComponent);
   }
   components.push({ type: "BODY", text: form.bodyText } as BodyComponent);
-
+  
   if (form.footerText.trim()) {
     components.push({ type: "FOOTER", text: form.footerText } as FooterComponent);
   }
-
+  
   if (form.buttons.length > 0) {
     const buttons: TemplateButton[] = form.buttons.map((b) => {
       if (b.type === ButtonType.QUICK_REPLY) return { type: ButtonType.QUICK_REPLY, text: b.text } as QuickReplyButton;
@@ -134,7 +138,7 @@ function buildPayload(form: FormState): CreateTemplatePayload {
 // ─── Styled Components ────────────────────────────────────────────────────────
 const InputCls = "w-full bg-[#F9FAFB] border border-[#E5E7EB] text-gray-800 text-[13px] rounded-lg px-3 py-2.5 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#25D366]/20 focus:border-[#25D366] transition-all font-sans shadow-sm";
 
-// ─── Media Upload Component ───────────────────────────────────────────────────
+// ─── Cloudinary Media Upload Component ─────────────────────────────────────────
 function MediaUploader({ 
   format, 
   onUpload, 
@@ -146,12 +150,19 @@ function MediaUploader({
 }) {
   const [uploading, setUploading] = useState(false);
   const [preview, setPreview] = useState<string | null>(currentUrl || null);
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const acceptMap = {
+  const acceptMap: Record<string, string> = {
     [HeaderFormat.IMAGE]: "image/*",
     [HeaderFormat.VIDEO]: "video/*",
-    [HeaderFormat.DOCUMENT]: ".pdf,.doc,.docx,.txt",
+    [HeaderFormat.DOCUMENT]: ".pdf,.doc,.docx,.txt,.ppt,.pptx,.xls,.xlsx",
+    [HeaderFormat.LOCATION]: "",
+  };
+
+  const resourceTypeMap: Record<string, string> = {
+    [HeaderFormat.IMAGE]: "image",
+    [HeaderFormat.VIDEO]: "video",
+    [HeaderFormat.DOCUMENT]: "raw",
     [HeaderFormat.LOCATION]: "",
   };
 
@@ -167,21 +178,27 @@ function MediaUploader({
 
     setUploading(true);
     try {
-      const response = await fetch(
-        `/api/upload?filename=${encodeURIComponent(file.name)}`,
-        {
-          method: "POST",
-          body: file,
-        }
-      );
-      const blob = await response.json();
-      if (blob.url) {
-        onUpload(blob.url);
-        setPreview(blob.url);
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('resource_type', resourceTypeMap[format] || 'auto');
+
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      
+      const result = await response.json();
+      
+      if (result.url) {
+        onUpload(result.url);
+        setPreview(result.url);
+      } else {
+        throw new Error(result.error || 'Upload failed');
       }
     } catch (error) {
       console.error("Upload failed:", error);
       alert("Upload failed. Please try again.");
+      setPreview(null);
     } finally {
       setUploading(false);
     }
@@ -205,13 +222,13 @@ function MediaUploader({
         className="hidden"
         onChange={handleFileChange}
       />
-
+      
       {preview && format === HeaderFormat.IMAGE && (
         <div className="relative rounded-xl overflow-hidden border border-gray-200">
-          <img src={preview} alt="Preview" className="w-full h-[140px] object-cover" />
+          <img src={preview} alt="Header Preview" className="w-full h-[140px] object-cover" />
           <button 
             onClick={() => { setPreview(null); onUpload(""); }}
-            className="absolute top-2 right-2 bg-black/50 text-white p-1 rounded-full hover:bg-black/70"
+            className="absolute top-2 right-2 bg-black/50 text-white p-1.5 rounded-full hover:bg-black/70 transition"
           >
             <X className="w-3.5 h-3.5" />
           </button>
@@ -223,7 +240,7 @@ function MediaUploader({
           <video src={preview} className="w-full h-[140px] object-cover" controls />
           <button 
             onClick={() => { setPreview(null); onUpload(""); }}
-            className="absolute top-2 right-2 bg-black/50 text-white p-1 rounded-full hover:bg-black/70"
+            className="absolute top-2 right-2 bg-black/50 text-white p-1.5 rounded-full hover:bg-black/70 transition"
           >
             <X className="w-3.5 h-3.5" />
           </button>
@@ -234,12 +251,12 @@ function MediaUploader({
         <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 flex items-center gap-3">
           <FileText className="w-8 h-8 text-[#25D366]" />
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-medium text-gray-700 truncate">{preview.split("/").pop()}</p>
-            <p className="text-[10px] text-gray-400">Document uploaded</p>
+            <p className="text-xs font-medium text-gray-700 truncate">{preview.split("/").pop()?.split("?")[0] || "Document"}</p>
+            <p className="text-[10px] text-gray-400">Document uploaded to Cloudinary</p>
           </div>
           <button 
             onClick={() => { setPreview(null); onUpload(""); }}
-            className="text-gray-400 hover:text-red-500"
+            className="text-gray-400 hover:text-red-500 transition"
           >
             <X className="w-4 h-4" />
           </button>
@@ -252,13 +269,13 @@ function MediaUploader({
         className="w-full flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-gray-300 rounded-xl text-xs font-bold text-gray-600 hover:border-[#25D366] hover:text-[#25D366] hover:bg-[#ECFDF5] transition-all disabled:opacity-50"
       >
         {uploading ? (
-          <><Loader2 className="w-4 h-4 animate-spin" /> Uploading...</>
+          <><Loader2 className="w-4 h-4 animate-spin" /> Uploading to Cloudinary...</>
         ) : (
           <>
             {format === HeaderFormat.IMAGE && <ImageUp className="w-4 h-4" />}
             {format === HeaderFormat.VIDEO && <Video className="w-4 h-4" />}
             {format === HeaderFormat.DOCUMENT && <Paperclip className="w-4 h-4" />}
-            Upload {format.toLowerCase()}
+            Upload {format.toLowerCase()} to Cloudinary
           </>
         )}
       </button>
@@ -277,7 +294,7 @@ function PhoneMockup({ form }: { form: FormState }) {
       if (!form.headerText) return null;
       return <p className="font-bold text-[13px] text-[#111b21] mb-1.5">{form.headerText}</p>;
     }
-
+    
     if (form.headerFormat === HeaderFormat.IMAGE && form.headerMediaUrl) {
       return (
         <div className="w-full h-[140px] rounded-lg mb-2 overflow-hidden">
@@ -285,7 +302,7 @@ function PhoneMockup({ form }: { form: FormState }) {
         </div>
       );
     }
-
+    
     if (form.headerFormat === HeaderFormat.VIDEO && form.headerMediaUrl) {
       return (
         <div className="w-full h-[140px] rounded-lg mb-2 overflow-hidden bg-black">
@@ -293,7 +310,7 @@ function PhoneMockup({ form }: { form: FormState }) {
         </div>
       );
     }
-
+    
     if (form.headerFormat === HeaderFormat.DOCUMENT && form.headerMediaUrl) {
       return (
         <div className="w-full bg-gray-50 rounded-lg mb-2 p-3 flex items-center gap-2 border border-gray-100">
@@ -325,7 +342,7 @@ function PhoneMockup({ form }: { form: FormState }) {
       {/* Apple iPhone Hardware Frame */}
       <div className="bg-[#1C1C1E] rounded-[45px] p-2.5 shadow-2xl shadow-gray-300/50 border-[3px] border-[#3A3A3C] ring-[1px] ring-gray-200">
         <div className="bg-[#EFEAE2] relative w-full h-[560px] rounded-[36px] overflow-hidden flex flex-col border-[4px] border-black">
-
+          
           <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[90px] h-[26px] bg-black rounded-b-[18px] z-20 flex justify-center items-center">
             <div className="w-[40px] h-[5px] bg-gray-800 rounded-full"></div>
           </div>
@@ -348,7 +365,7 @@ function PhoneMockup({ form }: { form: FormState }) {
                 <div className="bg-white rounded-xl rounded-tl-none shadow-sm overflow-hidden relative">
                   <div className="px-2.5 pt-2.5 pb-1">
                     {renderHeader()}
-
+                    
                     {form.bodyText ? (
                       <p className="text-[13.5px] text-[#111b21] leading-[19px] whitespace-pre-wrap break-words font-normal">
                         {renderBodyWithVars(form.bodyText)}
@@ -514,7 +531,7 @@ function TemplateViewModal({
               <p className="text-[10px] font-extrabold text-gray-400 uppercase tracking-widest mb-2">
                 {comp.type}
               </p>
-
+              
               {comp.type === "HEADER" && (
                 <div>
                   <p className="text-xs text-gray-500 mb-1">Format: <span className="font-semibold text-gray-700">{comp.format}</span></p>
@@ -538,15 +555,15 @@ function TemplateViewModal({
                   )}
                 </div>
               )}
-
+              
               {comp.type === "BODY" && comp.text && (
                 <p className="text-sm text-gray-800 whitespace-pre-wrap">{comp.text}</p>
               )}
-
+              
               {comp.type === "FOOTER" && comp.text && (
                 <p className="text-xs text-gray-500">{comp.text}</p>
               )}
-
+              
               {comp.type === "BUTTONS" && comp.buttons && (
                 <div className="space-y-2">
                   {comp.buttons.map((btn: any, bIdx: number) => (
@@ -581,7 +598,7 @@ function TemplateViewModal({
   );
 }
 
-// ─── Sub-Component: Create Form UI ────────────────────────────────────────────
+// ─── Sub-Component: Create/Edit Form UI ────────────────────────────────────────────
 function CreateTemplateForm({ 
   onSave, 
   onBack,
@@ -698,7 +715,7 @@ function CreateTemplateForm({
             <span className={`w-1.5 h-1.5 rounded-full ${validation.isValid ? "bg-[#10B981]" : "bg-[#EF4444]"}`} />
             {validation.isValid ? "Valid" : `${validation.errors.length} Errors`}
           </div>
-
+          
           <button 
             onClick={handleSubmit} 
             disabled={!validation.isValid || isSubmitting} 
@@ -795,7 +812,7 @@ function CreateTemplateForm({
               <button onClick={() => addButton(ButtonType.URL)} className="flex items-center gap-1.5 px-3 py-1.5 border border-dashed border-gray-300 rounded-lg text-xs font-bold text-gray-600 hover:bg-gray-50 hover:border-[#25D366] hover:text-[#25D366] transition-all"><ExternalLink className="w-3.5 h-3.5"/> URL Button</button>
               <button onClick={() => addButton(ButtonType.PHONE_NUMBER)} className="flex items-center gap-1.5 px-3 py-1.5 border border-dashed border-gray-300 rounded-lg text-xs font-bold text-gray-600 hover:bg-gray-50 hover:border-[#25D366] hover:text-[#25D366] transition-all"><Phone className="w-3.5 h-3.5"/> Phone Number</button>
             </div>
-
+            
             <div className="space-y-3">
               {form.buttons.map((btn, idx) => (
                 <div key={btn.id} className="bg-gray-50 border border-gray-200 rounded-xl p-4 relative">
@@ -826,7 +843,7 @@ function CreateTemplateForm({
               <h2 className="text-[15px] font-bold text-gray-800">Live Preview</h2>
               <span className="flex items-center gap-1.5 bg-[#ECFDF5] border border-[#A7F3D0] text-[#065F46] text-[10px] font-bold px-2 py-1 rounded-full uppercase"><span className="w-1.5 h-1.5 bg-[#10B981] rounded-full animate-pulse"/> WhatsApp</span>
             </div>
-
+            
             <PhoneMockup form={form} />
 
             <div className="mt-8 bg-[#F9FAFB] border border-gray-200 rounded-xl p-4">
@@ -854,12 +871,12 @@ export default function TemplateBuilderUI() {
   // Firebase State
   const [wabaId, setWabaId] = useState<string | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
-
+  
   // List State
   const [templates, setTemplates] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
-
+  
   // View/Edit Modal State
   const [viewTemplate, setViewTemplate] = useState<any>(null);
   const [editTemplate, setEditTemplate] = useState<any>(null);
@@ -896,7 +913,7 @@ export default function TemplateBuilderUI() {
         { headers: { Authorization: `Bearer ${accessToken}` } }
       );
       const result = await response.json();
-
+      
       if (result.data) {
         setTemplates(result.data);
       } else if (result.error) {
@@ -931,7 +948,7 @@ export default function TemplateBuilderUI() {
         }
       );
       const data = await response.json();
-
+      
       if (data.error) {
         alert("Meta Error: " + data.error.message);
       } else {
@@ -959,7 +976,7 @@ export default function TemplateBuilderUI() {
           body: JSON.stringify({ name: editTemplate.name }),
         }
       );
-
+      
       // Then create new one
       const createResponse = await fetch(
         `https://graph.facebook.com/v21.0/${wabaId}/message_templates`,
@@ -973,7 +990,7 @@ export default function TemplateBuilderUI() {
         }
       );
       const data = await createResponse.json();
-
+      
       if (data.error) {
         alert("Meta Error: " + data.error.message);
       } else {
@@ -1117,7 +1134,7 @@ export default function TemplateBuilderUI() {
                     <p className="text-xs text-gray-500">Components: <span className="font-semibold text-gray-700">{tpl.components?.length || 0}</span></p>
                   </div>
                 </div>
-
+                
                 <div className="flex gap-2 mt-4 pt-3 border-t border-gray-100">
                   <button 
                     onClick={() => setViewTemplate(tpl)}
@@ -1150,3 +1167,10 @@ export default function TemplateBuilderUI() {
     </div>
   );
 }
+'''
+
+with open('/mnt/agents/output/TemplateBuilderUI.tsx', 'w') as f:
+    f.write(template_builder_cloudinary)
+
+print("TemplateBuilderUI.tsx with Cloudinary saved!")
+print(f"Size: {len(template_builder_cloudinary)} chars")
