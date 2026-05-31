@@ -16,19 +16,40 @@ if (!admin.apps.length) {
 
 const db = admin.database();
 
-const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || "BASEKEY_YOUR_SECRET_TOKEN";
-
-// ─── GET: Webhook Verification ───
+// ─── GET: Webhook Verification (Dynamic Database Check) ───
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const mode = url.searchParams.get("hub.mode");
   const token = url.searchParams.get("hub.verify_token");
   const challenge = url.searchParams.get("hub.challenge");
 
-  if (mode === "subscribe" && token === VERIFY_TOKEN) {
-    console.log("✅ Webhook verified successfully");
-    return new Response(challenge, { status: 200 });
+  if (mode === "subscribe" && token) {
+    try {
+      // Firebase डेटाबेस में चेक करो कि क्या यह टोकन किसी यूज़र के config में है?
+      const usersRef = db.ref("users");
+      const snapshot = await usersRef.orderByChild("config/webhookVerifyToken").equalTo(token).once("value");
+
+      if (snapshot.exists()) {
+        // टोकन मिल गया! मतलब यह हमारा ही कोई क्लाइंट है।
+        snapshot.forEach((childSnapshot) => {
+          childSnapshot.ref.child("config").update({
+            isWebhookVerified: true
+          });
+        });
+
+        console.log(`✅ Webhook Verified for a user with token: ${token}`);
+        return new Response(challenge, { status: 200 });
+      } else {
+        // टोकन डेटाबेस में नहीं मिला
+        console.warn(`❌ Webhook Verification Failed: Token not found in database.`);
+        return new Response("Forbidden: Invalid Token", { status: 403 });
+      }
+    } catch (error) {
+      console.error("Database Error during verification:", error);
+      return new Response("Internal Server Error", { status: 500 });
+    }
   }
+
   return new Response("Forbidden", { status: 403 });
 }
 
@@ -198,7 +219,7 @@ async function handleIncomingMessage(phoneId: string, message: any, contacts: an
 
   // Save message to Firebase
   const chatRef = db.ref(`chats/${phoneId}/${senderPhone}/messages`);
-  const newMsgRef = await chatRef.push({
+  await chatRef.push({
     metaId: messageId,
     text,
     sender: "them",
@@ -250,7 +271,6 @@ async function handleStatusUpdate(phoneId: string, status: any) {
     });
     console.log(`📊 Status: ${newStatus} for msg ${metaId}`);
   } else {
-    // If metaId not found, try to find by timestamp range (fallback)
     console.log(`⚠️ Message with metaId ${metaId} not found, may need sync`);
   }
 
