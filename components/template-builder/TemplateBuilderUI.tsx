@@ -1,8 +1,4 @@
-
-# Now create the COMPLETE updated TemplateBuilderUI.tsx with Cloudinary upload
-# All features: Edit, View, Category Filter, Swipe Preview, Cloudinary Media Upload
-
-template_builder_cloudinary = '''"use client";
+"use client";
 
 import React, { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
