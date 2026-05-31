@@ -205,12 +205,11 @@ export default function ChatDashboard() {
   const [selectedMessages, setSelectedMessages] = useState<Set<string>>(new Set());
   const [showContactInfo, setShowContactInfo] = useState(false);
 
-    const [chatTheme, setChatTheme] = useState<ChatTheme>({
-    id: "wa-default",
-    name: "WhatsApp",
-    bgImage: "https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png",
-    bgColor: "#E5DDD5",
-    category: "classic",
+      const [chatTheme, setChatTheme] = useState<ChatTheme>({
+    id: "0",
+    name: "Alejandro Escamilla",
+    bgUrl: "https://picsum.photos/id/0/800/1400",
+    thumbUrl: "https://picsum.photos/id/0/144/256",
     accent: "#00A884",
   });
 
