@@ -17,7 +17,7 @@ import {
   TemplateButton,
   QuickReplyButton,
   UrlButton,
-} from "../types/template.types";
+} from "../../types/template.types";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // VALIDATION RESULT TYPES
