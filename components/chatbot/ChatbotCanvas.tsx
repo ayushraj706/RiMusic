@@ -265,7 +265,7 @@ function Canvas() {
         onDragOver={onDragOver}
         onDrop={onDrop}
       >
-        <ReactFlow
+        <div
           nodes={nodes}
           edges={edges}
           onNodesChange={onNodesChange}
