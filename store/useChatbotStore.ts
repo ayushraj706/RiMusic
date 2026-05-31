@@ -56,7 +56,7 @@ export type WhatsAppNodeData =
   | ListNodeData
   | MediaNodeData;
 
-export type WhatsAppNode = Node<WhatsAppNodeData>;
+export type WhatsAppNode = Node<WhatsAppNodeData & Record<string, unknown>>;
 
 // ─── Store Shape ──────────────────────────────────────────────────────────────
 
