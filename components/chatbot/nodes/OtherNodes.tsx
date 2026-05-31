@@ -7,7 +7,7 @@ import {
   type TextNodeData,
   type ListNodeData,
   type MediaNodeData,
-} from "../../store/useChatbotStore";
+} from "@/store/useChatbotStore";
 
 // ─── Text Node ────────────────────────────────────────────────────────────────
 
