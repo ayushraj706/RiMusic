@@ -74,7 +74,7 @@ export function extractVariableNumbers(text: string): number[] {
   while ((match = regex.exec(text)) !== null) {
     matches.push(parseInt(match[1], 10));
   }
-  return [...new Set(matches)].sort((a, b) => a - b);
+  return Array.from(new Set(matches)).sort((a, b) => a - b);
 }
 
 /**
