@@ -45,10 +45,3 @@ export async function POST(request: Request): Promise<NextResponse> {
     );
   }
 }
-''';
-
-with open('/mnt/agents/output/route-cloudinary.ts', 'w') as f:
-    f.write(api_route_cloudinary)
-
-print("Cloudinary API route saved!")
-print(f"Size: {len(api_route_cloudinary)} chars")
