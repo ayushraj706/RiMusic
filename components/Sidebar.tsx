@@ -24,9 +24,13 @@ export default function Sidebar() {
   const [isMatched, setIsMatched] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  
+  // 🚀 NAYA STATE: Mobile bottom bar ko hide karne ke liye
+  const [hideOnMobile, setHideOnMobile] = useState<boolean>(false);
 
   const pathname = usePathname();
 
+  // Firebase Auth & Config Load
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
@@ -46,6 +50,28 @@ export default function Sidebar() {
     });
 
     return () => unsubscribeAuth();
+  }, []);
+
+  // 🚀 NAYA LOGIC: Smart Detector jo dekhega ki Chat ya Builder khula hai ya nahi
+  useEffect(() => {
+    const checkIfDetailViewOpen = () => {
+      // Yeh check karega ki screen par chat, template builder, ya flow builder khula hai kya
+      const isDetailView = 
+        document.getElementById("hide-bottom-bar") || 
+        document.getElementById("mobile-chat-view") ||
+        document.getElementById("template-builder-view") ||
+        document.getElementById("flow-builder-view");
+        
+      setHideOnMobile(!!isDetailView);
+    };
+
+    checkIfDetailViewOpen(); // First check
+
+    // Observer: Agar screen par kuch bhi naya aata hai toh turant check karega
+    const observer = new MutationObserver(checkIfDetailViewOpen);
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    return () => observer.disconnect();
   }, []);
 
   if (loading) {
@@ -68,10 +94,9 @@ export default function Sidebar() {
   return (
     <>
       {/* ============================================ */}
-      {/* DESKTOP SIDEBAR - Relative & h-full to prevent overflow */}
+      {/* DESKTOP SIDEBAR - Safe & Fixed */}
       {/* ============================================ */}
       <aside className="hidden md:flex flex-col relative h-full w-20 min-w-[80px] shrink-0 bg-white border-r border-gray-200 z-40">
-        {/* Top Section - Navigation */}
         <div className="flex-1 flex flex-col items-center py-6 gap-2 overflow-y-auto no-scrollbar">
           {isMatched ? (
             <>
@@ -88,11 +113,9 @@ export default function Sidebar() {
                       title={item.label}
                     >
                       <item.icon className="w-5 h-5" />
-                      {/* Active indicator dot */}
                       {active && (
                         <div className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white" />
                       )}
-                      {/* Tooltip */}
                       <div className="absolute left-14 px-2 py-1 bg-gray-900 text-white text-[11px] font-medium rounded-md opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
                         {item.label}
                       </div>
@@ -113,7 +136,6 @@ export default function Sidebar() {
           )}
         </div>
 
-        {/* Bottom Section - Settings & Profile */}
         <div className="flex flex-col items-center gap-3 pb-6 pt-3 border-t border-gray-100">
           {isMatched && (
             <button
@@ -139,7 +161,6 @@ export default function Sidebar() {
             </button>
           )}
 
-          {/* Profile */}
           <div className="flex flex-col items-center gap-1">
             {isMatched && <CheckCircle2 className="w-3.5 h-3.5 text-[#25D366]" />}
             <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-sm font-bold text-gray-600 border border-gray-200 overflow-hidden shadow-sm">
@@ -154,9 +175,13 @@ export default function Sidebar() {
       </aside>
 
       {/* ============================================ */}
-      {/* MOBILE BOTTOM BAR - Lowered z-index to 30 */}
+      {/* MOBILE BOTTOM BAR - Smart Hide Logic Applied Here */}
       {/* ============================================ */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-gray-200 shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
+      <nav 
+        className={`md:hidden fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-gray-200 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] transition-all duration-300 ease-in-out ${
+          hideOnMobile ? "translate-y-full opacity-0 pointer-events-none" : "translate-y-0 opacity-100"
+        }`}
+      >
         <div className="flex items-center justify-around h-16 px-2">
           {isMatched ? (
             <>
@@ -183,7 +208,6 @@ export default function Sidebar() {
                 );
               })}
 
-              {/* Settings */}
               <button
                 onClick={() => setIsModalOpen(true)}
                 className="flex-1 flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-xl"
@@ -194,7 +218,6 @@ export default function Sidebar() {
                 <span className="text-[10px] font-medium text-gray-400">Settings</span>
               </button>
 
-              {/* Profile */}
               <div className="flex-1 flex flex-col items-center justify-center gap-0.5 py-1.5">
                 <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-sm font-bold text-gray-600 border border-gray-200 overflow-hidden">
                   {user?.photoURL ? (
@@ -222,7 +245,6 @@ export default function Sidebar() {
           )}
         </div>
 
-        {/* Safe area padding for iOS */}
         <div className="h-[env(safe-area-inset-bottom)] bg-white" />
       </nav>
 
