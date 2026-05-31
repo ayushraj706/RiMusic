@@ -1,0 +1,383 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// Prisma Schema — WhatsApp Marketing SaaS Platform
+// Database: PostgreSQL (recommended for JSON column support)
+// ─────────────────────────────────────────────────────────────────────────────
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum TemplateCategory {
+  MARKETING
+  UTILITY
+  AUTHENTICATION
+}
+
+enum TemplateStatus {
+  DRAFT          // Saved in SaaS, not yet submitted to Meta
+  PENDING        // Submitted to Meta, awaiting review
+  APPROVED       // Meta approved, ready to send
+  REJECTED       // Meta rejected submission
+  PAUSED         // Temporarily paused by Meta (quality issue)
+  DISABLED       // Disabled by Meta (policy violation)
+  IN_APPEAL      // Under appeal after rejection
+  ARCHIVED       // User archived this template
+}
+
+enum TemplateHeaderFormat {
+  TEXT
+  IMAGE
+  VIDEO
+  DOCUMENT
+  LOCATION
+}
+
+enum ButtonType {
+  QUICK_REPLY
+  URL
+  PHONE_NUMBER
+  COPY_CODE
+  MPM
+  CATALOG
+  FLOW
+  OTP
+}
+
+enum VariableMappingType {
+  STATIC          // Fixed value for all sends
+  CRM_FIELD       // Mapped to a contact/CRM field
+  CUSTOM_FORMULA  // Computed value (e.g., date formatting)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ORGANISATION / TENANT
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  plan      String   @default("starter")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // WhatsApp Business credentials
+  wabaId          String?  @unique @map("waba_id")
+  phoneNumberId   String?  @unique @map("phone_number_id")
+  accessToken     String?  @map("access_token")   // Encrypted at application layer
+  webhookSecret   String?  @map("webhook_secret")
+
+  users           User[]
+  templates       WaTemplate[]
+  templateSends   TemplateSend[]
+  campaigns       Campaign[]
+  contacts        Contact[]
+
+  @@map("organizations")
+}
+
+model User {
+  id             String       @id @default(cuid())
+  organizationId String       @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  email          String       @unique
+  name           String
+  role           String       @default("member")  // "owner" | "admin" | "member"
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  templates      WaTemplate[]
+  templateSends  TemplateSend[]
+
+  @@map("users")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WHATSAPP TEMPLATE (Core Model)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model WaTemplate {
+  id             String           @id @default(cuid())
+  organizationId String           @map("organization_id")
+  organization   Organization     @relation(fields: [organizationId], references: [id])
+  createdById    String           @map("created_by_id")
+  createdBy      User             @relation(fields: [createdById], references: [id])
+
+  // Template identity
+  name           String                           // e.g., "order_confirmation_v2"
+  displayName    String?          @map("display_name") // Human-friendly name for UI
+  category       TemplateCategory
+  language       String                           // BCP-47 code: "en_US", "hi", etc.
+  status         TemplateStatus   @default(DRAFT)
+
+  // Meta API identifiers (set after submission)
+  metaTemplateId String?          @unique @map("meta_template_id")  // Meta's numeric ID
+  metaStatus     String?          @map("meta_status")               // Raw status string from Meta
+  rejectionReason String?         @map("rejection_reason")
+
+  // Quality
+  qualityScore   String?          @map("quality_score") // "GREEN" | "YELLOW" | "RED"
+
+  // Full component definitions stored as JSON
+  // This is the exact payload sent to / received from Meta
+  components     Json             // Array of TemplateComponent
+
+  // Carousel flag for quick filtering
+  isCarousel     Boolean          @default(false) @map("is_carousel")
+
+  // Metadata & audit
+  tags           String[]         @default([])
+  notes          String?          // Internal notes (not sent to Meta)
+  submittedAt    DateTime?        @map("submitted_at")
+  approvedAt     DateTime?        @map("approved_at")
+  rejectedAt     DateTime?        @map("rejected_at")
+  lastSyncedAt   DateTime?        @map("last_synced_at")
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt      @map("updated_at")
+
+  // Relations
+  variableMappings TemplateVariableMapping[]
+  buttons          TemplateButtonConfig[]
+  sends            TemplateSend[]
+  campaigns        Campaign[]
+  auditLogs        TemplateAuditLog[]
+
+  @@unique([organizationId, name, language])
+  @@index([organizationId, status])
+  @@index([organizationId, category])
+  @@map("wa_templates")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TEMPLATE VARIABLE MAPPINGS
+// Maps {{1}}, {{2}}... to CRM fields for automated sends
+// ─────────────────────────────────────────────────────────────────────────────
+
+model TemplateVariableMapping {
+  id           String              @id @default(cuid())
+  templateId   String              @map("template_id")
+  template     WaTemplate          @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  // Which component this variable belongs to
+  componentType String             @map("component_type")  // "BODY" | "HEADER" | "BUTTON_URL"
+  buttonIndex   Int?               @map("button_index")    // Set if componentType is BUTTON_URL
+
+  variableIndex Int                @map("variable_index")  // 1, 2, 3 (matches {{1}}, {{2}})
+  mappingType   VariableMappingType @default(CRM_FIELD)
+
+  // For CRM_FIELD: the field name from Contact model
+  // e.g., "firstName", "email", "customFields.membershipTier"
+  crmFieldPath  String?            @map("crm_field_path")
+
+  // For STATIC: the fixed value to always use
+  staticValue   String?            @map("static_value")
+
+  // For CUSTOM_FORMULA: a formula expression
+  // e.g., "{{contact.orderDate | dateFormat('DD MMM YYYY')}}"
+  formula       String?
+
+  // Example/fallback value (shown in previews, used if CRM field is null)
+  fallbackValue String?            @map("fallback_value")
+  exampleValue  String?            @map("example_value")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt      @map("updated_at")
+
+  @@unique([templateId, componentType, variableIndex, buttonIndex])
+  @@map("template_variable_mappings")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TEMPLATE BUTTON CONFIG
+// Stores runtime payloads for quick-reply buttons (for chatbot routing)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model TemplateButtonConfig {
+  id           String     @id @default(cuid())
+  templateId   String     @map("template_id")
+  template     WaTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  buttonIndex  Int        @map("button_index")  // 0, 1, 2...
+  buttonType   ButtonType @map("button_type")
+  buttonText   String     @map("button_text")
+
+  // For QUICK_REPLY: the payload sent back when user taps
+  // This is what your chatbot/webhook receives
+  replyPayload String?    @map("reply_payload")
+
+  // For URL buttons: the static base URL (dynamic suffix set at send-time)
+  urlBase      String?    @map("url_base")
+
+  // For FLOW buttons: flow routing info
+  flowId       String?    @map("flow_id")
+  flowScreen   String?    @map("flow_screen")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([templateId, buttonIndex])
+  @@map("template_button_configs")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONTACTS (CRM)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Contact {
+  id             String       @id @default(cuid())
+  organizationId String       @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  phone          String                      // E.164 format
+  name           String?
+  email          String?
+
+  // Flat CRM fields for variable mapping
+  firstName      String?      @map("first_name")
+  lastName       String?      @map("last_name")
+  city           String?
+  language       String?      @default("en")
+  timezone       String?
+
+  // Flexible custom fields as JSON
+  customFields   Json?        @map("custom_fields")  // e.g., {"membershipTier": "Gold", "orderId": "ORD-123"}
+
+  optedIn        Boolean      @default(true)  @map("opted_in")
+  optedInAt      DateTime?    @map("opted_in_at")
+  optedOutAt     DateTime?    @map("opted_out_at")
+
+  tags           String[]     @default([])
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt      @map("updated_at")
+
+  templateSends  TemplateSend[]
+
+  @@unique([organizationId, phone])
+  @@index([organizationId, optedIn])
+  @@map("contacts")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TEMPLATE SEND LOG
+// Tracks every individual template message sent
+// ─────────────────────────────────────────────────────────────────────────────
+
+model TemplateSend {
+  id             String       @id @default(cuid())
+  organizationId String       @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  templateId     String       @map("template_id")
+  template       WaTemplate   @relation(fields: [templateId], references: [id])
+  contactId      String?      @map("contact_id")
+  contact        Contact?     @relation(fields: [contactId], references: [id])
+  campaignId     String?      @map("campaign_id")
+  campaign       Campaign?    @relation(fields: [campaignId], references: [id])
+  sentById       String?      @map("sent_by_id")
+  sentBy         User?        @relation(fields: [sentById], references: [id])
+
+  // Recipient (denormalized for history even if contact deleted)
+  recipientPhone String       @map("recipient_phone")
+
+  // The exact payload sent to Meta API (for debugging/resending)
+  sentPayload    Json         @map("sent_payload")
+
+  // Resolved variable values at time of send
+  resolvedVariables Json?     @map("resolved_variables")
+
+  // Meta API response
+  metaMessageId  String?      @unique @map("meta_message_id")  // wamid from API response
+  metaError      Json?        @map("meta_error")
+
+  // Delivery tracking (updated by webhook)
+  status         String       @default("QUEUED")
+  // QUEUED → SENT → DELIVERED → READ → FAILED
+  sentAt         DateTime?    @map("sent_at")
+  deliveredAt    DateTime?    @map("delivered_at")
+  readAt         DateTime?    @map("read_at")
+  failedAt       DateTime?    @map("failed_at")
+  failureReason  String?      @map("failure_reason")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt      @map("updated_at")
+
+  @@index([organizationId, templateId])
+  @@index([organizationId, status])
+  @@index([campaignId])
+  @@index([metaMessageId])
+  @@map("template_sends")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CAMPAIGNS
+// Bulk template send jobs targeting a segment of contacts
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Campaign {
+  id             String       @id @default(cuid())
+  organizationId String       @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  templateId     String       @map("template_id")
+  template       WaTemplate   @relation(fields: [templateId], references: [id])
+
+  name           String
+  status         String       @default("DRAFT")
+  // DRAFT | SCHEDULED | RUNNING | PAUSED | COMPLETED | FAILED
+
+  // Target audience (stored as filter criteria JSON)
+  // e.g., {"tags": ["vip"], "customFields.city": "Mumbai"}
+  audienceFilter Json?        @map("audience_filter")
+
+  // Scheduling
+  scheduledAt    DateTime?    @map("scheduled_at")
+  startedAt      DateTime?    @map("started_at")
+  completedAt    DateTime?    @map("completed_at")
+
+  // Stats (denormalized counters, refreshed periodically)
+  totalContacts  Int          @default(0) @map("total_contacts")
+  sentCount      Int          @default(0) @map("sent_count")
+  deliveredCount Int          @default(0) @map("delivered_count")
+  readCount      Int          @default(0) @map("read_count")
+  failedCount    Int          @default(0) @map("failed_count")
+
+  // Rate limiting (messages per second to avoid Meta throttling)
+  messagesPerSecond Int?      @default(10) @map("messages_per_second")
+
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt      @map("updated_at")
+
+  sends      TemplateSend[]
+
+  @@index([organizationId, status])
+  @@map("campaigns")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AUDIT LOG
+// Tracks all changes to templates (for compliance and debugging)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model TemplateAuditLog {
+  id         String     @id @default(cuid())
+  templateId String     @map("template_id")
+  template   WaTemplate @relation(fields: [templateId], references: [id])
+
+  action     String     // "CREATED" | "UPDATED" | "SUBMITTED" | "APPROVED" | "REJECTED" | "ARCHIVED"
+  actorId    String?    @map("actor_id")      // User ID or "system" for webhook events
+  actorType  String     @default("user")      // "user" | "system" | "meta_webhook"
+
+  oldData    Json?      @map("old_data")      // Snapshot before change
+  newData    Json?      @map("new_data")      // Snapshot after change
+  metadata   Json?                            // Extra context (e.g., Meta's rejection reason)
+
+  createdAt  DateTime   @default(now()) @map("created_at")
+
+  @@index([templateId])
+  @@map("template_audit_logs")
+}
