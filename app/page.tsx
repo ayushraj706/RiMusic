@@ -814,8 +814,8 @@ export default function ChatDashboard() {
             }}
           />
 
-          {activeContact ? (
-            <div className="flex flex-col h-full z-10 w-full relative">
+                    {activeContact ? (
+            <div id="mobile-chat-view" className="flex flex-col h-full z-10 w-full relative">
 
               {/* ── Header ── */}
               {selectedMessages.size > 0 ? (
