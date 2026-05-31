@@ -11,7 +11,12 @@ import {
   ExternalLink, 
   Phone, 
   CornerUpLeft,
-  Trash2
+  Trash2,
+  Bot,
+  Type,
+  PanelBottom,
+  Send,
+  Loader2
 } from "lucide-react";
 
 // ─── Type Imports ─────────────────────────────────────────────────────────────
@@ -85,16 +90,18 @@ function buildPayload(form: FormState): CreateTemplatePayload {
     } as HeaderComponent);
   }
   components.push({ type: "BODY", text: form.bodyText } as BodyComponent);
+  
   if (form.footerText.trim()) {
-    components.push({ type: "FOOTER", text: form.footerText });
+    components.push({ type: "FOOTER", text: form.footerText } as FooterComponent);
   }
+  
   if (form.buttons.length > 0) {
     const buttons: TemplateButton[] = form.buttons.map((b) => {
       if (b.type === ButtonType.QUICK_REPLY) return { type: ButtonType.QUICK_REPLY, text: b.text } as QuickReplyButton;
       if (b.type === ButtonType.URL) return { type: ButtonType.URL, text: b.text, url: b.url ?? "" } as UrlButton;
       return { type: ButtonType.PHONE_NUMBER, text: b.text, phone_number: b.phone_number ?? "" } as PhoneNumberButton;
     });
-    components.push({ type: "BUTTONS", buttons });
+    components.push({ type: "BUTTONS", buttons } as ButtonsComponent);
   }
   return { name: form.name, category: form.category, language: form.language, components };
 }
@@ -143,8 +150,8 @@ function PhoneMockup({ form }: { form: FormState }) {
 
           {/* iOS Status Bar */}
           <div className="bg-[#075E54] pt-[30px] pb-2 px-4 flex items-center gap-2.5 z-10 shadow-md">
-            <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center border border-white/30 text-sm">
-              🤖
+            <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center border border-white/30 text-white">
+              <Bot className="w-5 h-5" />
             </div>
             <div>
               <p className="text-[13px] font-semibold text-white leading-tight">
@@ -180,7 +187,7 @@ function PhoneMockup({ form }: { form: FormState }) {
 
                     <div className="flex justify-end items-center mt-1 pb-1">
                       <span className="text-[10px] text-[#667781] mr-1">10:30 AM</span>
-                      <svg viewBox="0 0 16 15" width="16" height="15" className="text-[#53bdeb]"><path fill="currentColor" d="M15.01 3.316l-.478-.372a.365.365 0 0 0-.51.063L8.666 9.879a.32.32 0 0 1-.484.033l-.358-.325a.319.319 0 0 0-.484.032l-.378.483a.418.418 0 0 0 .036.541l1.32 1.266c.143.14.361.125.484-.033l6.272-8.048a.366.366 0 0 0-.064-.512zm-4.1 0l-.478-.372a.365.365 0 0 0-.51.063L4.566 9.879a.32.32 0 0 1-.484.033L1.891 7.769a.366.366 0 0 0-.515.006l-.423.433a.364.364 0 0 0 .006.514l3.258 3.185c.143.14.361.125.484-.033l6.272-8.048a.365.365 0 0 0-.063-.51z"></path></svg>
+                      <CheckCircle2 className="w-3.5 h-3.5 text-[#53bdeb]" />
                     </div>
                   </div>
 
@@ -206,7 +213,7 @@ function PhoneMockup({ form }: { form: FormState }) {
               </div>
             ) : (
               <div className="flex items-center justify-center h-full">
-                <span className="bg-[#FFF3C7] text-gray-600 text-[11px] px-3 py-1.5 rounded-lg shadow-sm">
+                <span className="bg-[#FFF3C7] text-gray-600 text-[11px] px-3 py-1.5 rounded-lg shadow-sm text-center">
                   Messages to this chat are secured with end-to-end encryption.
                 </span>
               </div>
@@ -215,12 +222,14 @@ function PhoneMockup({ form }: { form: FormState }) {
 
           {/* iOS Bottom Bar */}
           <div className="bg-[#F0F0F0] px-3 py-2 pb-5 flex items-center gap-2">
-            <div className="w-7 h-7 rounded-full text-xl flex items-center justify-center">➕</div>
+            <div className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-gray-500 text-lg">
+              +
+            </div>
             <div className="flex-1 bg-white border border-gray-300 rounded-full px-3 py-1.5 text-xs text-gray-400 shadow-sm">
               Message
             </div>
             <div className="w-8 h-8 rounded-full bg-[#00A884] flex items-center justify-center text-white shadow-sm">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"></path></svg>
+              <Send className="w-4 h-4 ml-0.5" />
             </div>
           </div>
         </div>
@@ -230,7 +239,7 @@ function PhoneMockup({ form }: { form: FormState }) {
 }
 
 // ─── Main Template Builder UI ─────────────────────────────────────────────────
-export function TemplateBuilderUI({ onSave }: { onSave?: (data: any) => void }) {
+export function TemplateBuilderUI({ onSave }: { onSave?: (data: any) => Promise<void> | void }) {
   const [form, setForm] = useState<FormState>({
     name: "",
     category: TemplateCategory.MARKETING,
@@ -275,12 +284,26 @@ export function TemplateBuilderUI({ onSave }: { onSave?: (data: any) => void }) 
     setField("bodyText", form.bodyText + `{{${next}}}`);
   };
 
+  // ─── Backend Integration Logic ───
   const handleSubmit = async () => {
     if (!validation.isValid) return;
+    
     setIsSubmitting(true);
-    await new Promise((r) => setTimeout(r, 1000));
-    if(onSave) onSave(payload);
-    setIsSubmitting(false);
+    
+    try {
+      // Agar page.tsx se onSave function pass kiya gaya hai, toh payload backend ko bhej do
+      if (onSave) {
+        await onSave(payload);
+      } else {
+        // Fallback for testing (agar onSave nahi hai)
+        console.log("Submitting Payload to Meta API Endpoint:", payload);
+        await new Promise((r) => setTimeout(r, 1500)); 
+      }
+    } catch (error) {
+      console.error("Error saving template:", error);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const bodyCharLimit = form.category === TemplateCategory.AUTHENTICATION ? 150 : 1024;
@@ -292,7 +315,7 @@ export function TemplateBuilderUI({ onSave }: { onSave?: (data: any) => void }) 
       <header className="sticky top-0 z-40 bg-white border-b border-gray-200 px-6 py-3.5 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-[#25D366] flex items-center justify-center shadow-md">
-            <svg viewBox="0 0 20 20" className="w-4 h-4 fill-white"><path d="M10 2C5.6 2 2 5.6 2 10c0 1.4.4 2.8 1 4L2 18l4.1-1c1.2.6 2.5 1 3.9 1 4.4 0 8-3.6 8-8s-3.6-8-8-8z"/></svg>
+            <Bot className="w-5 h-5 text-white" />
           </div>
           <div>
             <h1 className="text-[15px] font-bold text-gray-800 leading-tight">Template Builder</h1>
@@ -305,18 +328,26 @@ export function TemplateBuilderUI({ onSave }: { onSave?: (data: any) => void }) 
             <span className={`w-1.5 h-1.5 rounded-full ${validation.isValid ? "bg-[#10B981]" : "bg-[#EF4444]"}`} />
             {validation.isValid ? "Valid" : `${validation.errors.length} Errors`}
           </div>
-          <button onClick={handleSubmit} disabled={!validation.isValid || isSubmitting} className={`px-5 py-2 rounded-lg text-sm font-bold transition-all shadow-sm ${validation.isValid && !isSubmitting ? "bg-[#25D366] hover:bg-[#1DA851] text-white" : "bg-gray-200 text-gray-400 cursor-not-allowed"}`}>
-            {isSubmitting ? "Submitting..." : "Submit to Meta"}
+          
+          <button 
+            onClick={handleSubmit} 
+            disabled={!validation.isValid || isSubmitting} 
+            className={`flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-bold transition-all shadow-sm ${validation.isValid && !isSubmitting ? "bg-[#25D366] hover:bg-[#1DA851] text-white" : "bg-gray-200 text-gray-400 cursor-not-allowed"}`}
+          >
+            {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+            {isSubmitting ? "Saving..." : "Save & Submit to Meta"}
           </button>
         </div>
       </header>
 
       <div className="flex flex-col lg:flex-row flex-1 overflow-hidden">
         {/* Left Form Panel */}
-        <div className="flex-1 overflow-y-auto px-4 lg:px-8 py-6 space-y-5">
+        <div className="flex-1 overflow-y-auto px-4 lg:px-8 py-6 space-y-5 pb-20">
           
           <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
-            <h2 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-4 flex items-center gap-2"><FileText className="w-4 h-4 text-[#25D366]" /> Identity</h2>
+            <h2 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-4 flex items-center gap-2">
+              <FileText className="w-4 h-4 text-[#25D366]" /> Identity
+            </h2>
             <div className="mb-4">
               <label className="flex justify-between text-[12px] font-bold text-gray-700 mb-1.5">Template Name <span className="text-gray-400 font-normal">{form.name.length}/512</span></label>
               <input className={InputCls} placeholder="e.g. order_confirmation" value={form.name} onChange={(e) => setField("name", e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))} />
@@ -339,11 +370,13 @@ export function TemplateBuilderUI({ onSave }: { onSave?: (data: any) => void }) 
           </div>
 
           <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
-            <h2 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-4 flex items-center gap-2"><ImageIcon className="w-4 h-4 text-[#25D366]" /> Header <span className="normal-case font-medium text-gray-400 tracking-normal">(Optional)</span></h2>
+            <h2 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-4 flex items-center gap-2">
+              <ImageIcon className="w-4 h-4 text-[#25D366]" /> Header <span className="normal-case font-medium text-gray-400 tracking-normal">(Optional)</span>
+            </h2>
             <div className="flex flex-wrap gap-2 mb-4">
               {(["NONE", ...Object.values(HeaderFormat)]).map((fmt) => (
-                <button key={fmt} onClick={() => setField("headerFormat", fmt as FormState["headerFormat"])} className={`px-4 py-1.5 rounded-full text-xs font-bold border transition-all ${form.headerFormat === fmt ? "bg-[#ECFDF5] border-[#25D366] text-[#065F46]" : "bg-gray-50 border-gray-200 text-gray-500 hover:border-[#25D366]"}`}>
-                  {fmt === "NONE" ? "None" : fmt === HeaderFormat.TEXT ? "📝 Text" : fmt === HeaderFormat.IMAGE ? "🖼️ Image" : fmt === HeaderFormat.VIDEO ? "🎬 Video" : fmt === HeaderFormat.DOCUMENT ? "📄 Document" : "📍 Location"}
+                <button key={fmt} onClick={() => setField("headerFormat", fmt as FormState["headerFormat"])} className={`px-4 py-1.5 rounded-full text-xs font-bold border transition-all flex items-center gap-1.5 ${form.headerFormat === fmt ? "bg-[#ECFDF5] border-[#25D366] text-[#065F46]" : "bg-gray-50 border-gray-200 text-gray-500 hover:border-[#25D366]"}`}>
+                  {fmt === "NONE" ? "None" : fmt === HeaderFormat.TEXT ? <><Type className="w-3.5 h-3.5"/> Text</> : fmt === HeaderFormat.IMAGE ? <><ImageIcon className="w-3.5 h-3.5"/> Image</> : fmt === HeaderFormat.VIDEO ? <><Video className="w-3.5 h-3.5"/> Video</> : fmt === HeaderFormat.DOCUMENT ? <><FileText className="w-3.5 h-3.5"/> Document</> : <><MapPin className="w-3.5 h-3.5"/> Location</>}
                 </button>
               ))}
             </div>
@@ -356,7 +389,9 @@ export function TemplateBuilderUI({ onSave }: { onSave?: (data: any) => void }) 
           </div>
 
           <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
-            <h2 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-4 flex items-center gap-2"><FileText className="w-4 h-4 text-[#25D366]" /> Message Body</h2>
+            <h2 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-4 flex items-center gap-2">
+              <Type className="w-4 h-4 text-[#25D366]" /> Message Body
+            </h2>
             <label className="flex justify-between text-[12px] font-bold text-gray-700 mb-1.5">Body Text <span className={`${form.bodyText.length > bodyCharLimit ? 'text-red-500 font-bold' : 'text-gray-400'} font-normal`}>{form.bodyText.length}/{bodyCharLimit}</span></label>
             <div className="relative">
               <textarea className={`${InputCls} resize-none min-h-[120px]`} placeholder="Hi {{1}}, your order is confirmed! 🎉" value={form.bodyText} onChange={(e) => setField("bodyText", e.target.value)} />
@@ -365,9 +400,22 @@ export function TemplateBuilderUI({ onSave }: { onSave?: (data: any) => void }) 
             {fieldError("components.BODY") && <p className="text-red-500 text-xs mt-1 font-medium">{fieldError("components.BODY")}</p>}
           </div>
 
+          {/* New Footer Section Added Back */}
+          <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-4 flex items-center gap-2">
+              <PanelBottom className="w-4 h-4 text-[#25D366]" /> Footer <span className="normal-case font-medium text-gray-400 tracking-normal">(Optional)</span>
+            </h2>
+            <div>
+              <label className="flex justify-between text-[12px] font-bold text-gray-700 mb-1.5">Footer Text <span className="text-gray-400 font-normal">{form.footerText.length}/60</span></label>
+              <input className={InputCls} placeholder="e.g. Reply STOP to unsubscribe" value={form.footerText} onChange={(e) => setField("footerText", e.target.value)} maxLength={60} />
+            </div>
+          </div>
+
           {/* Interactive Buttons Section with Official Icons */}
           <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
-            <h2 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-4 flex items-center gap-2"><CornerUpLeft className="w-4 h-4 text-[#25D366]" /> Buttons <span className="normal-case font-medium text-gray-400 tracking-normal">(Interactive)</span></h2>
+            <h2 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-4 flex items-center gap-2">
+              <CornerUpLeft className="w-4 h-4 text-[#25D366]" /> Buttons <span className="normal-case font-medium text-gray-400 tracking-normal">(Interactive)</span>
+            </h2>
             <div className="flex flex-wrap gap-2 mb-5">
               <button onClick={() => addButton(ButtonType.QUICK_REPLY)} className="flex items-center gap-1.5 px-3 py-1.5 border border-dashed border-gray-300 rounded-lg text-xs font-bold text-gray-600 hover:bg-gray-50 hover:border-[#25D366] hover:text-[#25D366] transition-all"><CornerUpLeft className="w-3.5 h-3.5"/> Quick Reply</button>
               <button onClick={() => addButton(ButtonType.URL)} className="flex items-center gap-1.5 px-3 py-1.5 border border-dashed border-gray-300 rounded-lg text-xs font-bold text-gray-600 hover:bg-gray-50 hover:border-[#25D366] hover:text-[#25D366] transition-all"><ExternalLink className="w-3.5 h-3.5"/> URL Button</button>
