@@ -370,9 +370,12 @@ export default function ChatDashboard() {
         </div>
       )}
 
-      <div className="flex w-full h-full relative">
-        {/* Sidebar */}
-        <Sidebar />
+            <div className="flex w-full h-full relative">
+        
+        {/* Sidebar / Bottom Navigation - Hide on mobile when a chat is active */}
+        <div className={activeContact ? "hidden md:flex" : "flex"}>
+          <Sidebar />
+        </div>
 
         {/* ─── CONTACT LIST (Left Panel) ─── */}
         <div className={`
