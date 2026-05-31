@@ -1163,10 +1163,3 @@ export default function TemplateBuilderUI() {
     </div>
   );
 }
-'''
-
-with open('/mnt/agents/output/TemplateBuilderUI.tsx', 'w') as f:
-    f.write(template_builder_cloudinary)
-
-print("TemplateBuilderUI.tsx with Cloudinary saved!")
-print(f"Size: {len(template_builder_cloudinary)} chars")
