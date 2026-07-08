@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import * as admin from "firebase-admin";
+import { runFlowEngine } from "@/lib/whatsapp/engine";
 
 // ─── Initialize Firebase Admin ───
 if (!admin.apps.length) {
@@ -25,7 +26,7 @@ export async function GET(req: Request) {
 
   if (mode === "subscribe" && token) {
     try {
-      // Firebase डेटाबेस में चेक करो कि क्या यह टोकन किसी यूज़र के config में है?
+      // Firebase डेटाबेस में चेक करो कि क्या यह टोकन किसी यूज़र के config में है?
       const usersRef = db.ref("users");
       const snapshot = await usersRef.orderByChild("config/webhookVerifyToken").equalTo(token).once("value");
 
@@ -249,6 +250,28 @@ async function handleIncomingMessage(phoneId: string, message: any, contacts: an
   });
 
   console.log(`📩 [${messageType}] From ${senderName} (${senderPhone}): ${text.substring(0, 60)}`);
+
+  // ─── 🔌 D. HAND OFF TO THE FLOW ENGINE ───
+  // Only meaningful signal types drive the flow forward. Status echoes,
+  // reactions, order payloads etc. don't move the conversation state.
+  try {
+    if (interactive?.type === "button_reply") {
+      await runFlowEngine(phoneId, senderPhone, { type: "button_reply", value: interactive.id });
+    } else if (interactive?.type === "list_reply") {
+      await runFlowEngine(phoneId, senderPhone, { type: "list_reply", value: interactive.id });
+    } else if (button?.payload) {
+      // Older template quick-reply buttons come through as message.button, not message.interactive
+      await runFlowEngine(phoneId, senderPhone, { type: "button_reply", value: button.payload });
+    } else if (messageType === "text") {
+      await runFlowEngine(phoneId, senderPhone, { type: "text", value: text });
+    }
+    // image/video/audio/document/location/etc: no flow signal fired for now —
+    // add explicit handling here later if a node type needs to react to media.
+  } catch (engineError) {
+    // Flow engine failing should NEVER break webhook ack — Meta doesn't care about your bot logic,
+    // it just wants 200 back. Log it and move on.
+    console.error("Flow engine error:", engineError);
+  }
 }
 
 // ─── Handle Status Update ───
