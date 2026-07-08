@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import * as admin from "firebase-admin";
 import { runFlowEngine } from "@/lib/whatsapp/engine";
 // 👇 NAYA CODE: Prisma ko import kiya aur uska nick-name 'prisma' rakh diya
-import { db as prisma } from "@/Prisma/lib/db"; 
+import { db as prisma } from "@/prisma/lib/db"; 
 
 // ─── Initialize Firebase Admin ───
 if (!admin.apps.length) {
