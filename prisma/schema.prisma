@@ -21,14 +21,15 @@ model SystemSettings {
 
 // 2. WhatsApp Contacts (Chat Sidebar ke liye)
 model Contact {
-  id              String    @id @default(uuid())
-  phoneNumber     String    @unique // WhatsApp Number (e.g., "918252366912")
-  name            String?   // WhatsApp profile name
-  unreadCount     Int       @default(0)
-  lastMessageAt   DateTime  @default(now())
-  isSessionActive Boolean   @default(true) // 24-Hour Session Window Window Indicator
-  messages        Message[]
-  createdAt       DateTime  @default(now())
+  id               String    @id @default(uuid())
+  phoneNumber      String    @unique // WhatsApp Number (e.g., "918252366912")
+  name             String?   // WhatsApp profile name
+  unreadCount      Int       @default(0)
+  lastMessageAt    DateTime  @default(now())
+  isSessionActive  Boolean   @default(true) // 24-Hour Session Window Window Indicator
+  activeFlowNodeId String?   // 👈 NAYA: Jis node pe user currently atka hai
+  messages         Message[]
+  createdAt        DateTime  @default(now())
 }
 
 // 3. Messages Model (Full Chat System & Media Engine)
@@ -42,6 +43,16 @@ model Message {
   status      MessageStatus @default(SENT) // SENT, DELIVERED, READ
   mediaUrl    String?       // Cloudinary Secure URL for Images/Videos/Docs
   timestamp   DateTime      @default(now())
+}
+
+// 4. Chatbot Flow (React Flow JSON storage) 👈 NAYA MODEL
+model ChatFlow {
+  id        String   @id @default(uuid())
+  name      String   @default("Default Flow")
+  isActive  Boolean  @default(true)
+  nodes     Json     // React Flow nodes array
+  edges     Json     // React Flow edges array
+  updatedAt DateTime @updatedAt
 }
 
 // Enums for Strict Data Typing
