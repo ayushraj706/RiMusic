@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import * as admin from "firebase-admin";
 import { runFlowEngine } from "@/lib/whatsapp/engine";
+// 👇 NAYA CODE: Prisma ko import kiya aur uska nick-name 'prisma' rakh diya
+import { db as prisma } from "@/Prisma/lib/db"; 
 
 // ─── Initialize Firebase Admin ───
 if (!admin.apps.length) {
@@ -15,6 +17,7 @@ if (!admin.apps.length) {
   }
 }
 
+// Firebase yahan 'db' naam se use hoga
 const db = admin.database();
 
 // ─── GET: Webhook Verification (Dynamic Database Check) ───
@@ -218,7 +221,7 @@ async function handleIncomingMessage(phoneId: string, message: any, contacts: an
       text = `📎 ${messageType} message`;
   }
 
-  // Save message to Firebase
+  // Save message to Firebase (using 'db')
   const chatRef = db.ref(`chats/${phoneId}/${senderPhone}/messages`);
   await chatRef.push({
     metaId: messageId,
@@ -236,7 +239,7 @@ async function handleIncomingMessage(phoneId: string, message: any, contacts: an
     button,
   });
 
-  // Update contact info
+  // Update contact info in Firebase
   const infoRef = db.ref(`chats/${phoneId}/${senderPhone}/info`);
   const infoSnap = await infoRef.once("value");
   const currentUnread = infoSnap.exists() ? (infoSnap.val().unread || 0) : 0;
@@ -252,21 +255,26 @@ async function handleIncomingMessage(phoneId: string, message: any, contacts: an
   console.log(`📩 [${messageType}] From ${senderName} (${senderPhone}): ${text.substring(0, 60)}`);
 
   // ─── 🔌 D. HAND OFF TO THE FLOW ENGINE ───
-  // Only meaningful signal types drive the flow forward. Status echoes,
-  // reactions, order payloads etc. don't move the conversation state.
   try {
-    if (interactive?.type === "button_reply") {
-      await runFlowEngine(phoneId, senderPhone, { type: "button_reply", value: interactive.id });
-    } else if (interactive?.type === "list_reply") {
-      await runFlowEngine(phoneId, senderPhone, { type: "list_reply", value: interactive.id });
-    } else if (button?.payload) {
-      // Older template quick-reply buttons come through as message.button, not message.interactive
-      await runFlowEngine(phoneId, senderPhone, { type: "button_reply", value: button.payload });
-    } else if (messageType === "text") {
-      await runFlowEngine(phoneId, senderPhone, { type: "text", value: text });
+    // 👇 NAYA CODE: Check if AI Bot is active using Prisma
+    const settings = await prisma.systemSettings.findUnique({ where: { id: "main_settings" } });
+
+    // Agar AI bot ON nahi hai, tabhi flow engine chalega
+    if (!settings?.isAiBotActive) {
+      if (interactive?.type === "button_reply") {
+        await runFlowEngine(phoneId, senderPhone, { type: "button_reply", value: interactive.id });
+      } else if (interactive?.type === "list_reply") {
+        await runFlowEngine(phoneId, senderPhone, { type: "list_reply", value: interactive.id });
+      } else if (button?.payload) {
+        // Older template quick-reply buttons come through as message.button, not message.interactive
+        await runFlowEngine(phoneId, senderPhone, { type: "button_reply", value: button.payload });
+      } else if (messageType === "text") {
+        await runFlowEngine(phoneId, senderPhone, { type: "text", value: text });
+      }
+    } else {
+      console.log(`🤖 AI Bot is active. Skipping visual Flow Engine for ${senderPhone}.`);
+      // Future me Gemini AI ka code yahan aayega
     }
-    // image/video/audio/document/location/etc: no flow signal fired for now —
-    // add explicit handling here later if a node type needs to react to media.
   } catch (engineError) {
     // Flow engine failing should NEVER break webhook ack — Meta doesn't care about your bot logic,
     // it just wants 200 back. Log it and move on.
@@ -281,7 +289,7 @@ async function handleStatusUpdate(phoneId: string, status: any) {
   const newStatus = status.status; // 'sent', 'delivered', 'read', 'failed'
   const timestamp = parseInt(status.timestamp) * 1000;
 
-  // Find message by metaId and update status
+  // Find message by metaId and update status in Firebase
   const messagesRef = db.ref(`chats/${phoneId}/${recipientPhone}/messages`);
   const snapshot = await messagesRef.orderByChild("metaId").equalTo(metaId).once("value");
 
