@@ -1,4 +1,6 @@
 // lib/whatsapp/sender.ts
+import { db } from "@/Prisma/lib/db"; 
+
 export async function sendWhatsAppMessage(phoneId: string, to: string, payload: any) {
   const settings = await db.systemSettings.findUnique({ where: { id: "main_settings" } });
   if (!settings?.accessToken) throw new Error("WhatsApp access token not configured");
