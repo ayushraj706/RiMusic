@@ -1,5 +1,5 @@
 // lib/whatsapp/engine.ts
-import { db } from "@prisma/lib/db"; // your Prisma client singleton
+import { db } from "@/prisma/lib/db"; // your Prisma client singleton
 import type { WhatsAppNode, WhatsAppNodeData } from "@/store/useChatbotStore";
 import type { Edge } from "@xyflow/react";
 import { sendWhatsAppMessage } from "./sender";
