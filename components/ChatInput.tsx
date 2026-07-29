@@ -8,6 +8,7 @@ import {
   Smile, Check,
 } from "lucide-react";
 import EmojiPicker, { EmojiClickData, Theme } from "emoji-picker-react";
+import TemplatePicker from "./TemplatePicker"; // NAYA COMPONENT IMPORT KIYA
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -36,7 +37,7 @@ interface ChatInputProps {
   onSendMedia?: (file: File, type: "image" | "video" | "document" | "audio") => Promise<void>;
   onSendLocation?: (lat: number, lng: number) => void;
   onSendInteractive?: (type: "quick_reply" | "url") => void;
-  onSendTemplate?: () => void;
+  onSendTemplate?: (template: any) => void; // Update kiya taaki selected template receive kar sake
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -112,96 +113,23 @@ function MultiMediaBubble({ previews, isSending, onCancel, onSend, onAddMore }: 
   return (
     <>
       {lightboxOpen && active?.type === "image" && (
-        <div
-          className="fixed inset-0 z-[200] bg-black/95 flex items-center justify-center p-4"
-          onClick={() => setLightboxOpen(false)}
-        >
-          <button
-            className="absolute top-4 right-4 text-white/70 hover:text-white p-2 rounded-full bg-white/10"
-            onClick={() => setLightboxOpen(false)}
-          >
+        <div className="fixed inset-0 z-[200] bg-black/95 flex items-center justify-center p-4" onClick={() => setLightboxOpen(false)}>
+          <button className="absolute top-4 right-4 text-white/70 hover:text-white p-2 rounded-full bg-white/10" onClick={() => setLightboxOpen(false)}>
             <X className="w-5 h-5" />
           </button>
-          <img
-            src={active.url}
-            alt={active.name}
-            className="max-w-full max-h-[88vh] rounded-xl object-contain shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          />
-          <button
-            className="absolute bottom-6 right-6 bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-xl flex items-center gap-2 text-sm font-semibold transition"
-            onClick={(e) => { e.stopPropagation(); handleDownloadAll(); }}
-          >
-            <Download className="w-4 h-4" /> Download All ({items.length})
-          </button>
-          {items.length > 1 && (
-            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-2">
-              {items.map((_, i) => (
-                <button
-                  key={i}
-                  onClick={(e) => { e.stopPropagation(); setActiveIndex(i); }}
-                  className={`w-2 h-2 rounded-full transition ${i === activeIndex ? "bg-white" : "bg-white/40"}`}
-                />
-              ))}
-            </div>
-          )}
+          <img src={active.url} alt={active.name} className="max-w-full max-h-[88vh] rounded-xl object-contain shadow-2xl" onClick={(e) => e.stopPropagation()} />
         </div>
       )}
 
       <div className="flex justify-end px-4 py-2">
         <div className="relative w-[260px]">
-          {items.length >= 3 && (
-            <div className="absolute inset-0 rounded-2xl bg-gray-200 transform rotate-[-4deg] scale-[0.97] z-0" />
-          )}
-          {items.length >= 2 && (
-            <div className="absolute inset-0 rounded-2xl bg-gray-300 transform rotate-[-2deg] scale-[0.985] z-[1]" />
-          )}
+          {items.length >= 3 && <div className="absolute inset-0 rounded-2xl bg-gray-200 transform rotate-[-4deg] scale-[0.97] z-0" />}
+          {items.length >= 2 && <div className="absolute inset-0 rounded-2xl bg-gray-300 transform rotate-[-2deg] scale-[0.985] z-[1]" />}
 
           <div className="relative z-[2]">
             {active?.type === "image" ? (
-              <div
-                className="relative rounded-2xl overflow-hidden shadow-xl cursor-pointer group"
-                onClick={() => setLightboxOpen(true)}
-              >
-                <img
-                  src={active.url}
-                  alt={active.name}
-                  className="w-full object-cover max-h-64 rounded-2xl"
-                />
-
-                {items.length > 1 && (
-                  <div className="absolute top-2 right-2 bg-black/60 text-white text-xs font-bold px-2 py-0.5 rounded-full backdrop-blur-sm">
-                    {activeIndex + 1}/{items.length}
-                  </div>
-                )}
-
-                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-all duration-200 flex items-center justify-center gap-3 opacity-0 group-hover:opacity-100">
-                  <button
-                    className="bg-white/90 text-gray-800 p-2.5 rounded-full shadow-lg"
-                    onClick={(e) => { e.stopPropagation(); setLightboxOpen(true); }}
-                  >
-                    <Eye className="w-4 h-4" />
-                  </button>
-                  <button
-                    className="bg-white/90 text-gray-800 p-2.5 rounded-full shadow-lg"
-                    onClick={(e) => { e.stopPropagation(); handleDownloadAll(); }}
-                  >
-                    <Download className="w-4 h-4" />
-                  </button>
-                </div>
-
-                {isSending && (
-                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center rounded-2xl">
-                    <div className="bg-white/20 backdrop-blur-sm rounded-2xl p-4 flex flex-col items-center gap-2">
-                      <Loader2 className="w-7 h-7 text-white animate-spin" />
-                      <span className="text-white text-xs font-semibold">Sending {items.length > 1 ? `${items.length} photos` : "photo"}...</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : active?.type === "video" ? (
-              <div className="relative rounded-2xl overflow-hidden shadow-xl bg-black">
-                <video src={active.url} className="w-full max-h-64 rounded-2xl object-contain" controls={!isSending} />
+              <div className="relative rounded-2xl overflow-hidden shadow-xl cursor-pointer group" onClick={() => setLightboxOpen(true)}>
+                <img src={active.url} alt={active.name} className="w-full object-cover max-h-48 rounded-2xl" />
                 {isSending && (
                   <div className="absolute inset-0 bg-black/50 flex items-center justify-center rounded-2xl">
                     <Loader2 className="w-7 h-7 text-white animate-spin" />
@@ -210,97 +138,24 @@ function MultiMediaBubble({ previews, isSending, onCancel, onSend, onAddMore }: 
               </div>
             ) : (
               <div className="bg-white rounded-2xl p-3 shadow-md flex items-center gap-3 border border-gray-100">
-                <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center shrink-0">
-                  <FileText className="w-5 h-5 text-purple-600" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-gray-800 truncate">{active.name}</p>
-                  <p className="text-xs text-gray-400">{active.size}</p>
-                </div>
+                <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center shrink-0"><FileText className="w-5 h-5 text-purple-600" /></div>
+                <div className="min-w-0 flex-1"><p className="text-sm font-semibold text-gray-800 truncate">{active.name}</p></div>
                 {isSending && <Loader2 className="w-4 h-4 text-purple-500 animate-spin shrink-0" />}
-              </div>
-            )}
-
-            {items.length > 1 && active.type === "image" && (
-              <div className="flex gap-1.5 mt-2 overflow-x-auto pb-1 scrollbar-none">
-                {items.map((item, i) => (
-                  <button
-                    key={i}
-                    onClick={() => setActiveIndex(i)}
-                    className={`shrink-0 w-10 h-10 rounded-lg overflow-hidden border-2 transition ${
-                      i === activeIndex ? "border-[#00A884]" : "border-transparent opacity-60"
-                    }`}
-                  >
-                    {item.type === "image" ? (
-                      <img src={item.url} alt="" className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full bg-gray-200 flex items-center justify-center">
-                        <FileText className="w-4 h-4 text-gray-500" />
-                      </div>
-                    )}
-                  </button>
-                ))}
-                {!isSending && (
-                  <button
-                    onClick={onAddMore}
-                    className="shrink-0 w-10 h-10 rounded-lg bg-gray-100 border-2 border-dashed border-gray-300 flex items-center justify-center hover:bg-gray-200 transition"
-                  >
-                    <Plus className="w-4 h-4 text-gray-400" />
-                  </button>
-                )}
               </div>
             )}
           </div>
 
           {!isSending && (
             <div className="flex gap-2 mt-2 justify-end items-center">
-              {items.length > 1 && (
-                <button
-                  onClick={handleDownloadAll}
-                  className="px-3 py-1.5 text-xs font-semibold text-gray-600 bg-white/80 border border-gray-200 rounded-xl hover:bg-gray-50 transition shadow-sm flex items-center gap-1"
-                >
-                  <Download className="w-3 h-3" /> All
-                </button>
-              )}
-              <button
-                onClick={onCancel}
-                className="px-3 py-1.5 text-xs font-semibold text-gray-600 bg-white/80 border border-gray-200 rounded-xl hover:bg-gray-50 transition shadow-sm"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSendClick}
-                disabled={sendAnim}
-                className={`px-4 py-1.5 text-xs font-bold text-white rounded-xl transition shadow-sm flex items-center gap-1.5 overflow-hidden ${
-                  sent ? "bg-[#00A884]" : "bg-[#00A884] hover:bg-[#008f6f]"
-                }`}
-              >
-                {sent ? (
-                  <Check className="w-3.5 h-3.5" />
-                ) : sendAnim ? (
-                  <>
-                    <span className="animate-[fly_0.35s_ease-in_forwards] inline-flex">
-                      <Send className="w-3.5 h-3.5" />
-                    </span>
-                    <span className="opacity-0">Send</span>
-                  </>
-                ) : (
-                  <>
-                    <Send className="w-3.5 h-3.5" /> Send{items.length > 1 ? ` (${items.length})` : ""}
-                  </>
-                )}
+              <button onClick={onCancel} className="px-3 py-1.5 text-xs font-semibold text-gray-600 bg-white/80 border border-gray-200 rounded-xl hover:bg-gray-50 transition shadow-sm">Cancel</button>
+              <button onClick={handleSendClick} disabled={sendAnim} className={`px-4 py-1.5 text-xs font-bold text-white rounded-xl transition shadow-sm flex items-center gap-1.5 ${sent ? "bg-[#00A884]" : "bg-[#00A884] hover:bg-[#008f6f]"}`}>
+                {sent ? <Check className="w-3.5 h-3.5" /> : sendAnim ? <span className="animate-[fly_0.35s_ease-in_forwards] inline-flex"><Send className="w-3.5 h-3.5" /></span> : <><Send className="w-3.5 h-3.5" /> Send</>}
               </button>
             </div>
           )}
         </div>
       </div>
-
-      <style>{`
-        @keyframes fly {
-          0%   { transform: translateX(0) rotate(0deg); opacity: 1; }
-          100% { transform: translateX(60px) rotate(-30deg); opacity: 0; }
-        }
-      `}</style>
+      <style>{`@keyframes fly { 0% { transform: translateX(0) rotate(0deg); opacity: 1; } 100% { transform: translateX(60px) rotate(-30deg); opacity: 0; } }`}</style>
     </>
   );
 }
@@ -321,42 +176,15 @@ function AudioRecorder({ onStop, onCancel }: AudioRecorderProps) {
 
   useEffect(() => {
     navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
-      const mimeType = MediaRecorder.isTypeSupported("audio/ogg;codecs=opus")
-        ? "audio/ogg;codecs=opus"
-        : MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-        ? "audio/webm;codecs=opus"
-        : "audio/webm";
-
+      const mimeType = MediaRecorder.isTypeSupported("audio/ogg;codecs=opus") ? "audio/ogg;codecs=opus" : "audio/webm";
       const mr = new MediaRecorder(stream, { mimeType });
       mediaRecorderRef.current = mr;
       mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
       mr.start(100);
-
-      timerRef.current = setInterval(() => {
-        setElapsed((prev) => prev + 1);
-      }, 1000);
-    }).catch(() => {
-      alert("Microphone access denied.");
-      onCancel();
-    });
-
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-      mediaRecorderRef.current?.stream.getTracks().forEach((t) => t.stop());
-    };
+      timerRef.current = setInterval(() => setElapsed((prev) => prev + 1), 1000);
+    }).catch(() => { alert("Microphone access denied."); onCancel(); });
+    return () => { if (timerRef.current) clearInterval(timerRef.current); mediaRecorderRef.current?.stream.getTracks().forEach((t) => t.stop()); };
   }, []);
-
-  const handlePause = () => {
-    if (!mediaRecorderRef.current) return;
-    if (isPaused) {
-      mediaRecorderRef.current.resume();
-      timerRef.current = setInterval(() => setElapsed((p) => p + 1), 1000);
-    } else {
-      mediaRecorderRef.current.pause();
-      if (timerRef.current) clearInterval(timerRef.current);
-    }
-    setIsPaused(!isPaused);
-  };
 
   const handleStop = () => {
     const mr = mediaRecorderRef.current;
@@ -371,43 +199,15 @@ function AudioRecorder({ onStop, onCancel }: AudioRecorderProps) {
   };
 
   return (
-    <div className="flex items-center gap-3 bg-white border border-red-200 rounded-[22px] px-4 py-2.5 shadow-lg animate-in slide-in-from-bottom-2 duration-200 w-full">
-      <span className="relative flex h-3 w-3 shrink-0">
+    <div className="flex items-center gap-2 bg-white border border-red-200 rounded-[20px] px-3 py-1.5 shadow-sm animate-in slide-in-from-bottom-2 duration-200 w-full">
+      <span className="relative flex h-2.5 w-2.5 shrink-0 ml-1">
         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-        <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span>
       </span>
-
-      <span className="text-sm font-bold text-red-500 tabular-nums w-10">{formatDuration(elapsed)}</span>
-
-      <div className="flex items-center gap-0.5 flex-1">
-        {Array.from({ length: 20 }).map((_, i) => (
-          <div
-            key={i}
-            className={`rounded-full bg-[#00A884] transition-all duration-150 ${isPaused ? "opacity-40" : "opacity-100"}`}
-            style={{
-              width: 2,
-              height: isPaused ? 4 : `${Math.random() * 14 + 4}px`,
-            }}
-          />
-        ))}
-      </div>
-
-      <button onClick={handlePause} className="p-1.5 hover:bg-gray-100 rounded-full transition">
-        {isPaused
-          ? <Play className="w-4 h-4 text-gray-600" />
-          : <Pause className="w-4 h-4 text-gray-600" />}
-      </button>
-
-      <button onClick={onCancel} className="p-1.5 hover:bg-red-50 rounded-full transition">
-        <X className="w-4 h-4 text-red-400" />
-      </button>
-
-      <button
-        onClick={handleStop}
-        className="w-9 h-9 bg-[#00A884] rounded-full flex items-center justify-center shadow-md hover:bg-[#008f6f] transition"
-      >
-        <Send className="w-4 h-4 text-white ml-0.5" />
-      </button>
+      <span className="text-sm font-bold text-red-500 tabular-nums w-9 ml-1">{formatDuration(elapsed)}</span>
+      <div className="flex-1"></div>
+      <button onClick={onCancel} className="p-1.5 hover:bg-red-50 rounded-full transition"><X className="w-4 h-4 text-red-400" /></button>
+      <button onClick={handleStop} className="w-8 h-8 bg-[#00A884] rounded-full flex items-center justify-center shadow-md hover:bg-[#008f6f] transition"><Send className="w-3.5 h-3.5 text-white ml-0.5" /></button>
     </div>
   );
 }
@@ -415,18 +215,7 @@ function AudioRecorder({ onStop, onCancel }: AudioRecorderProps) {
 // ─── Main ChatInput ───────────────────────────────────────────────────────────
 
 export default function ChatInput({
-  inputText,
-  setInputText,
-  onSend,
-  isSending,
-  disabled = false,
-  replyingTo,
-  onCancelReply,
-  activeContactName = "Contact",
-  onSendMedia,
-  onSendLocation,
-  onSendInteractive,
-  onSendTemplate,
+  inputText, setInputText, onSend, isSending, disabled = false, replyingTo, onCancelReply, activeContactName = "Contact", onSendMedia, onSendLocation, onSendInteractive, onSendTemplate, phoneId, accessToken
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const multiImageInputRef = useRef<HTMLInputElement>(null);
@@ -439,45 +228,27 @@ export default function ChatInput({
   const [isRecording, setIsRecording] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false); // NEW STATE FOR TEMPLATES
 
   const [pendingMedias, setPendingMedias] = useState<MultiMediaPreview | null>(null);
   const [isSendingMedia, setIsSendingMedia] = useState(false);
 
   useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (emojiPickerRef.current && !emojiPickerRef.current.contains(e.target as Node)) {
-        setShowEmojiPicker(false);
-      }
-    };
+    const handler = (e: MouseEvent) => { if (emojiPickerRef.current && !emojiPickerRef.current.contains(e.target as Node)) { setShowEmojiPicker(false); } };
     if (showEmojiPicker) document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [showEmojiPicker]);
 
-  const toggleMediaMenu = () => {
-    setShowMediaMenu((p) => !p);
-    setShowInteractiveMenu(false);
-    setShowEmojiPicker(false);
-  };
-
-  const toggleInteractiveMenu = () => {
-    setShowInteractiveMenu((p) => !p);
-    setShowMediaMenu(false);
-    setShowEmojiPicker(false);
-  };
+  const toggleMediaMenu = () => { setShowMediaMenu((p) => !p); setShowInteractiveMenu(false); setShowEmojiPicker(false); setShowTemplatePicker(false); };
+  const toggleInteractiveMenu = () => { setShowInteractiveMenu((p) => !p); setShowMediaMenu(false); setShowEmojiPicker(false); setShowTemplatePicker(false); };
 
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInputText(e.target.value);
-    if (textareaRef.current) {
-      textareaRef.current.style.height = "auto";
-      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 100)}px`;
-    }
+    if (textareaRef.current) { textareaRef.current.style.height = "auto"; textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 100)}px`; }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      if (inputText.trim()) onSend();
-    }
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (inputText.trim()) onSend(); }
   };
 
   const handleEmojiClick = (emojiData: EmojiClickData) => {
@@ -485,256 +256,129 @@ export default function ChatInput({
     textareaRef.current?.focus();
   };
 
-  const handleFileChange = (
-    e: React.ChangeEvent<HTMLInputElement>,
-    type: "image" | "video" | "document"
-  ) => {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, type: "image" | "video" | "document") => {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
-
-    const newItems = files.map((file) => ({
-      file,
-      type,
-      url: URL.createObjectURL(file),
-      name: file.name,
-      size: formatBytes(file.size),
-    }));
-
-    setPendingMedias((prev) => {
-      if (!prev) return { files: newItems };
-      return { files: [...prev.files, ...newItems] };
-    });
-
-    setShowMediaMenu(false);
-    e.target.value = "";
+    const newItems = files.map((file) => ({ file, type, url: URL.createObjectURL(file), name: file.name, size: formatBytes(file.size) }));
+    setPendingMedias((prev) => prev ? { files: [...prev.files, ...newItems] } : { files: newItems });
+    setShowMediaMenu(false); e.target.value = "";
   };
 
   const handleSendPendingMedias = async () => {
     if (!pendingMedias || !onSendMedia) return;
     setIsSendingMedia(true);
-    try {
-      for (const item of pendingMedias.files) {
-        await onSendMedia(item.file, item.type);
-      }
-    } finally {
-      pendingMedias.files.forEach((i) => URL.revokeObjectURL(i.url));
-      setPendingMedias(null);
-      setIsSendingMedia(false);
-    }
+    try { for (const item of pendingMedias.files) { await onSendMedia(item.file, item.type); } } 
+    finally { pendingMedias.files.forEach((i) => URL.revokeObjectURL(i.url)); setPendingMedias(null); setIsSendingMedia(false); }
   };
 
-  const handleCancelPendingMedias = () => {
-    if (pendingMedias) pendingMedias.files.forEach((i) => URL.revokeObjectURL(i.url));
-    setPendingMedias(null);
-  };
-
-  const handleAddMore = () => {
-    multiImageInputRef.current?.click();
-  };
+  const handleCancelPendingMedias = () => { if (pendingMedias) pendingMedias.files.forEach((i) => URL.revokeObjectURL(i.url)); setPendingMedias(null); };
+  const handleAddMore = () => { multiImageInputRef.current?.click(); };
 
   const handleLocationClick = () => {
     if (!navigator.geolocation) return alert("Geolocation not supported.");
     setIsLocating(true);
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        onSendLocation?.(pos.coords.latitude, pos.coords.longitude);
-        setIsLocating(false);
-        setShowMediaMenu(false);
-      },
-      () => {
-        alert("Location access denied.");
-        setIsLocating(false);
-        setShowMediaMenu(false);
-      }
+      (pos) => { onSendLocation?.(pos.coords.latitude, pos.coords.longitude); setIsLocating(false); setShowMediaMenu(false); },
+      () => { alert("Location access denied."); setIsLocating(false); setShowMediaMenu(false); }
     );
   };
 
-  const handleAudioStop = useCallback(
-    async (blob: Blob, _duration: number) => {
-      setIsRecording(false);
-      if (!onSendMedia) return;
-      const file = await convertAudioToOgg(blob);
-      await onSendMedia(file, "audio");
-    },
-    [onSendMedia]
-  );
+  const handleAudioStop = useCallback(async (blob: Blob, _duration: number) => {
+    setIsRecording(false);
+    if (!onSendMedia) return;
+    const file = await convertAudioToOgg(blob);
+    await onSendMedia(file, "audio");
+  }, [onSendMedia]);
 
   const mediaOptions = [
-    {
-      icon: ImageIcon,
-      label: "Photo",
-      color: "text-blue-500",
-      bg: "bg-blue-50",
-      action: () => multiImageInputRef.current?.click(),
-    },
-    {
-      icon: Camera,
-      label: "Camera",
-      color: "text-pink-500",
-      bg: "bg-pink-50",
-      action: () => videoInputRef.current?.click(),
-    },
-    {
-      icon: FileText,
-      label: "Document",
-      color: "text-purple-500",
-      bg: "bg-purple-50",
-      action: () => docInputRef.current?.click(),
-    },
-    {
-      icon: isLocating ? Loader2 : MapPin,
-      label: "Location",
-      color: "text-green-500",
-      bg: "bg-green-50",
-      action: handleLocationClick,
-      spin: isLocating
-    },
+    { icon: ImageIcon, label: "Photo", color: "text-blue-500", bg: "bg-blue-50", action: () => multiImageInputRef.current?.click() },
+    { icon: Camera, label: "Camera", color: "text-pink-500", bg: "bg-pink-50", action: () => videoInputRef.current?.click() },
+    { icon: FileText, label: "Document", color: "text-purple-500", bg: "bg-purple-50", action: () => docInputRef.current?.click() },
+    { icon: isLocating ? Loader2 : MapPin, label: "Location", color: "text-green-500", bg: "bg-green-50", action: handleLocationClick, spin: isLocating },
   ];
 
   const interactiveOptions = [
-    {
-      icon: MessageSquare,
-      label: "Quick Reply",
-      color: "text-blue-600",
-      bg: "bg-blue-50",
-      action: () => { onSendInteractive?.("quick_reply"); setShowInteractiveMenu(false); },
-    },
-    {
-      icon: Link2,
-      label: "URL Button",
-      color: "text-teal-600",
-      bg: "bg-teal-50",
-      action: () => { onSendInteractive?.("url"); setShowInteractiveMenu(false); },
-    },
-    {
-      icon: LayoutTemplate,
-      label: "Template",
-      color: "text-indigo-600",
-      bg: "bg-indigo-50",
-      action: () => { onSendTemplate?.(); setShowInteractiveMenu(false); },
-    },
+    { icon: MessageSquare, label: "Quick Reply", color: "text-blue-600", bg: "bg-blue-50", action: () => { onSendInteractive?.("quick_reply"); setShowInteractiveMenu(false); } },
+    { icon: Link2, label: "URL Button", color: "text-teal-600", bg: "bg-teal-50", action: () => { onSendInteractive?.("url"); setShowInteractiveMenu(false); } },
+    { icon: LayoutTemplate, label: "Template", color: "text-indigo-600", bg: "bg-indigo-50", action: () => { setShowTemplatePicker(true); setShowInteractiveMenu(false); } }, // CHANGED HERE TO OPEN TEMPLATE PICKER
   ];
 
   const activeOptions = showMediaMenu ? mediaOptions : interactiveOptions;
 
   return (
-    // 🌟 FLOATING WRAPPER: यह बॉक्स को हवा में लटकाएगा
-    <div className="absolute bottom-4 left-0 right-0 z-40 px-2 sm:px-4 pointer-events-none flex justify-center">
+    // 🌟 PATLA KIYA GAYA AUR NICHE (bottom-1) KIYA GAYA FLOATING WRAPPER
+    <div className="absolute bottom-1 sm:bottom-2 left-0 right-0 z-40 px-2 sm:px-4 pointer-events-none flex justify-center">
       
-      {/* 🌟 MAIN FLOATING PILL */}
-      <div className="w-full max-w-4xl bg-white/95 backdrop-blur-xl border border-gray-200/60 shadow-[0_8px_30px_rgb(0,0,0,0.12)] rounded-[32px] pointer-events-auto p-1.5 flex flex-col transition-all duration-300 animate-in slide-in-from-bottom-5 fade-in">
+      {/* 🌟 SLIM FLOATING PILL */}
+      <div className="w-full max-w-4xl bg-white/95 backdrop-blur-xl border border-gray-200/60 shadow-[0_8px_30px_rgb(0,0,0,0.12)] rounded-[28px] pointer-events-auto p-1 flex flex-col transition-all duration-300 animate-in slide-in-from-bottom-5 fade-in">
 
-        {/* Hidden file inputs */}
         <input type="file" ref={multiImageInputRef} accept="image/*,video/*" multiple className="hidden" onChange={(e) => handleFileChange(e, "image")} />
         <input type="file" ref={videoInputRef} accept="image/*,video/*" capture="environment" className="hidden" onChange={(e) => handleFileChange(e, "video")} />
         <input type="file" ref={docInputRef} accept=".pdf,.doc,.docx,.txt" className="hidden" onChange={(e) => handleFileChange(e, "document")} />
 
-        {/* Pending Multi-Media Bubble */}
         {pendingMedias && (
-          <MultiMediaBubble
-            previews={pendingMedias}
-            isSending={isSendingMedia}
-            onCancel={handleCancelPendingMedias}
-            onSend={handleSendPendingMedias}
-            onAddMore={handleAddMore}
-          />
+          <MultiMediaBubble previews={pendingMedias} isSending={isSendingMedia} onCancel={handleCancelPendingMedias} onSend={handleSendPendingMedias} onAddMore={handleAddMore} />
         )}
 
-        {/* Reply Banner */}
         {replyingTo && !pendingMedias && (
-          <div className="mx-2 mt-1 mb-2 bg-gray-50/80 backdrop-blur-md rounded-2xl overflow-hidden shadow-sm flex items-stretch border border-gray-100 animate-in slide-in-from-bottom-2">
-            <div className="w-1.5 bg-[#00A884]" />
-            <div className="p-2 px-3 flex-1 flex justify-between items-start">
+          <div className="mx-2 mt-1 mb-1.5 bg-gray-50/80 backdrop-blur-md rounded-2xl overflow-hidden shadow-sm flex items-stretch border border-gray-100 animate-in slide-in-from-bottom-2">
+            <div className="w-1 bg-[#00A884]" />
+            <div className="p-1.5 px-3 flex-1 flex justify-between items-start">
               <div className="flex flex-col min-w-0">
-                <span className="text-[#00A884] font-bold text-[12px] mb-0.5">
-                  {replyingTo.sender === "me" ? "You" : activeContactName}
-                </span>
-                <span className="text-[13px] text-gray-600 line-clamp-1">{replyingTo.text}</span>
+                <span className="text-[#00A884] font-bold text-[11px] mb-0.5">{replyingTo.sender === "me" ? "You" : activeContactName}</span>
+                <span className="text-[12px] text-gray-600 line-clamp-1">{replyingTo.text}</span>
               </div>
-              <button
-                onClick={onCancelReply}
-                className="p-1 hover:bg-gray-200 rounded-full transition shrink-0 ml-2"
-              >
-                <X className="w-4 h-4 text-gray-400" />
-              </button>
+              <button onClick={onCancelReply} className="p-1 hover:bg-gray-200 rounded-full transition shrink-0 ml-2"><X className="w-3.5 h-3.5 text-gray-400" /></button>
             </div>
           </div>
         )}
 
-        {/* Pop-up Menus (Media or Interactive) */}
+        {/* TEMPLATE PICKER POPUP (NEW) */}
+        {showTemplatePicker && (
+          <TemplatePicker
+            wabaId={phoneId} // Passing credentials
+            accessToken={accessToken}
+            onClose={() => setShowTemplatePicker(false)}
+            onSelect={(template) => {
+              onSendTemplate?.(template); // Calling backend logic with selected template
+              setShowTemplatePicker(false);
+            }}
+          />
+        )}
+
         {(showMediaMenu || showInteractiveMenu) && (
-          <div className="absolute bottom-full left-4 mb-3 bg-white/95 backdrop-blur-xl border border-gray-100 shadow-2xl rounded-2xl p-2.5 flex gap-2 z-50 animate-in slide-in-from-bottom-3 fade-in duration-200">
+          <div className="absolute bottom-full left-4 mb-3 bg-white/95 backdrop-blur-xl border border-gray-100 shadow-2xl rounded-2xl p-2 flex gap-1.5 z-50 animate-in slide-in-from-bottom-3 fade-in duration-200">
             {activeOptions.map((opt, i) => (
-              <button
-                key={i}
-                onClick={opt.action}
-                className="flex flex-col items-center gap-1.5 p-2 w-[72px] rounded-xl hover:bg-gray-50 active:scale-95 transition"
-              >
-                <div className={`w-12 h-12 rounded-full ${opt.bg} flex items-center justify-center shadow-sm`}>
-                  <opt.icon className={`w-5 h-5 ${opt.color} ${(opt as any).spin ? "animate-spin" : ""}`} />
+              <button key={i} onClick={opt.action} className="flex flex-col items-center gap-1 p-2 w-[65px] rounded-xl hover:bg-gray-50 active:scale-95 transition">
+                <div className={`w-10 h-10 rounded-full ${opt.bg} flex items-center justify-center shadow-sm`}>
+                  <opt.icon className={`w-[18px] h-[18px] ${opt.color} ${(opt as any).spin ? "animate-spin" : ""}`} />
                 </div>
-                <span className="text-[10px] font-bold text-gray-600 text-center leading-tight">
-                  {opt.label}
-                </span>
+                <span className="text-[9px] font-bold text-gray-600 text-center leading-tight">{opt.label}</span>
               </button>
             ))}
           </div>
         )}
 
-        {/* Emoji Picker */}
         {showEmojiPicker && (
-          <div
-            ref={emojiPickerRef}
-            className="absolute bottom-full left-4 mb-3 z-50 shadow-2xl rounded-3xl overflow-hidden animate-in slide-in-from-bottom-3 fade-in duration-200 border border-gray-100"
-          >
-            <EmojiPicker
-              onEmojiClick={handleEmojiClick}
-              theme={Theme.LIGHT}
-              lazyLoadEmojis
-              searchDisabled={false}
-              skinTonesDisabled
-              height={350}
-              width={300}
-            />
+          <div ref={emojiPickerRef} className="absolute bottom-full left-4 mb-3 z-50 shadow-2xl rounded-3xl overflow-hidden animate-in slide-in-from-bottom-3 fade-in duration-200 border border-gray-100">
+            <EmojiPicker onEmojiClick={handleEmojiClick} theme={Theme.LIGHT} lazyLoadEmojis height={350} width={300} />
           </div>
         )}
 
-        {/* Main Row */}
-        <div className="flex items-end gap-1.5 px-1 py-1">
+        {/* MAIN ROW - THINNER & MORE COMPACT */}
+        <div className="flex items-end gap-1.5 px-1 py-0.5">
 
           {isRecording ? (
-            <div className="flex-1 w-full">
-              <AudioRecorder
-                onStop={handleAudioStop}
-                onCancel={() => setIsRecording(false)}
-              />
-            </div>
+            <div className="flex-1 w-full"><AudioRecorder onStop={handleAudioStop} onCancel={() => setIsRecording(false)} /></div>
           ) : (
             <>
-              {/* Plus / Media toggle */}
-              <button
-                onClick={toggleMediaMenu}
-                className="w-10 h-10 shrink-0 rounded-full flex items-center justify-center text-gray-500 hover:bg-gray-100 transition"
-              >
-                <Plus
-                  className={`w-6 h-6 transition-transform duration-300 ${showMediaMenu ? "rotate-45 text-[#00A884]" : ""}`}
-                />
+              <button onClick={toggleMediaMenu} className="w-9 h-9 shrink-0 rounded-full flex items-center justify-center text-gray-500 hover:bg-gray-100 transition">
+                <Plus className={`w-5 h-5 transition-transform duration-300 ${showMediaMenu ? "rotate-45 text-[#00A884]" : ""}`} />
               </button>
 
-              {/* Input box */}
-              <div className="flex-1 bg-gray-100/50 border border-transparent focus-within:border-gray-200 focus-within:bg-white rounded-[24px] flex items-end px-3 py-1.5 transition-all">
-                <button
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    setShowEmojiPicker((p) => !p);
-                    setShowMediaMenu(false);
-                    setShowInteractiveMenu(false);
-                  }}
-                  className={`w-7 h-7 mb-1.5 shrink-0 transition rounded-full flex items-center justify-center ${
-                    showEmojiPicker ? "text-[#00A884]" : "text-gray-400 hover:text-[#00A884]"
-                  }`}
-                >
-                  <Smile className="w-5 h-5" />
+              <div className="flex-1 bg-gray-100/60 border border-transparent focus-within:border-gray-200 focus-within:bg-white rounded-[20px] flex items-end px-2 py-0.5 transition-all">
+                <button onMouseDown={(e) => { e.preventDefault(); setShowEmojiPicker((p) => !p); setShowMediaMenu(false); setShowInteractiveMenu(false); setShowTemplatePicker(false); }} className={`w-7 h-7 mb-0.5 shrink-0 transition rounded-full flex items-center justify-center ${showEmojiPicker ? "text-[#00A884]" : "text-gray-400 hover:text-[#00A884]"}`}>
+                  <Smile className="w-[18px] h-[18px]" />
                 </button>
                 <textarea
                   ref={textareaRef}
@@ -742,42 +386,24 @@ export default function ChatInput({
                   onChange={handleTextChange}
                   onKeyDown={handleKeyDown}
                   placeholder="Message..."
-                  className="w-full max-h-[100px] bg-transparent resize-none overflow-y-auto text-[15px] text-gray-800 outline-none placeholder-gray-400 py-1.5 px-2 font-medium"
+                  className="w-full max-h-[80px] bg-transparent resize-none overflow-y-auto text-[14px] text-gray-800 outline-none placeholder-gray-400 py-1 px-1.5 font-medium"
                   rows={1}
                   disabled={disabled || isSending || !!pendingMedias}
                 />
               </div>
 
-              {/* Right actions */}
-              <div className="flex items-center gap-1 shrink-0 pb-0.5">
+              <div className="flex items-center gap-0.5 shrink-0 pb-0.5">
                 {inputText.trim() ? (
-                  <button
-                    onClick={onSend}
-                    disabled={isSending || disabled}
-                    className="w-10 h-10 bg-[#00A884] text-white rounded-full flex items-center justify-center transition hover:scale-105 active:scale-95 shadow-md disabled:opacity-50 hover:bg-[#008f6f]"
-                  >
-                    {isSending
-                      ? <Loader2 className="w-5 h-5 animate-spin" />
-                      : <Send className="w-5 h-5 ml-0.5" />}
+                  <button onClick={onSend} disabled={isSending || disabled} className="w-9 h-9 bg-[#00A884] text-white rounded-full flex items-center justify-center transition hover:scale-105 active:scale-95 shadow-md disabled:opacity-50 hover:bg-[#008f6f]">
+                    {isSending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4 ml-0.5" />}
                   </button>
                 ) : (
                   <>
-                    <button
-                      onClick={toggleInteractiveMenu}
-                      className={`w-10 h-10 rounded-full flex items-center justify-center transition ${
-                        showInteractiveMenu
-                          ? "bg-[#00A884]/10 text-[#00A884]"
-                          : "text-gray-500 hover:bg-gray-100"
-                      }`}
-                      title="Templates & Interactive"
-                    >
-                      <LayoutTemplate className="w-5 h-5" />
+                    <button onClick={toggleInteractiveMenu} className={`w-9 h-9 rounded-full flex items-center justify-center transition ${showInteractiveMenu ? "bg-[#00A884]/10 text-[#00A884]" : "text-gray-500 hover:bg-gray-100"}`} title="Templates & Interactive">
+                      <IndianRupee className="w-4 h-4" />
                     </button>
-                    <button
-                      onClick={() => setIsRecording(true)}
-                      className="w-10 h-10 rounded-full flex items-center justify-center text-gray-500 hover:bg-gray-100 transition"
-                    >
-                      <Mic className="w-5 h-5" />
+                    <button onClick={() => setIsRecording(true)} className="w-9 h-9 rounded-full flex items-center justify-center text-gray-500 hover:bg-gray-100 transition">
+                      <Mic className="w-4 h-4" />
                     </button>
                   </>
                 )}
