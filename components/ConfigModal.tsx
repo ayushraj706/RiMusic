@@ -3,7 +3,15 @@
 import { useState, useEffect } from "react";
 import { database, auth } from "../lib/firebase";
 import { ref, set } from "firebase/database";
-import { X, Key, Phone, Link2, CheckCircle2, Copy, ShieldAlert, Check } from "lucide-react";
+import { X, Key, Phone, Link2, CheckCircle2, Copy, ShieldAlert, Check, Facebook } from "lucide-react";
+
+// TypeScript के लिए Window ऑब्जेक्ट में FB को डिक्लेअर कर रहे हैं
+declare global {
+  interface Window {
+    fbAsyncInit: any;
+    FB: any;
+  }
+}
 
 interface ConfigModalProps {
   isOpen: boolean;
@@ -12,6 +20,9 @@ interface ConfigModalProps {
 }
 
 export default function ConfigModal({ isOpen, onClose, onSuccess }: ConfigModalProps) {
+  // नया स्टेट: टैब स्विच करने के लिए (auto या manual)
+  const [setupMode, setSetupMode] = useState<"auto" | "manual">("auto");
+  
   const [accessToken, setAccessToken] = useState("");
   const [phoneId, setPhoneId] = useState("");
   const [wabaId, setWabaId] = useState(""); 
@@ -20,6 +31,7 @@ export default function ConfigModal({ isOpen, onClose, onSuccess }: ConfigModalP
   const [loading, setLoading] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
+  // 1. Data Load & Webhook URL Setup
   useEffect(() => {
     if (isOpen) {
       const savedToken = localStorage.getItem("metaAccessToken") || "";
@@ -31,7 +43,6 @@ export default function ConfigModal({ isOpen, onClose, onSuccess }: ConfigModalP
       setPhoneId(savedPhone);
       setWabaId(savedWaba);
 
-      // डायनामिक Webhook URL (Localhost और Vercel दोनों पर काम करेगा)
       const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || window.location.origin;
       setWebhookUrl(`${baseUrl}/api/webhook`);
 
@@ -44,9 +55,33 @@ export default function ConfigModal({ isOpen, onClose, onSuccess }: ConfigModalP
     }
   }, [isOpen]);
 
+  // 2. Facebook SDK Load (सिर्फ एक बार लोड होगा)
+  useEffect(() => {
+    if (isOpen) {
+      window.fbAsyncInit = function() {
+        window.FB.init({
+          appId      : '919361547126340', // तुम्हारी SuperKey App ID
+          cookie     : true,
+          xfbml      : true,
+          version    : 'v20.0'
+        });
+      };
+
+      (function(d, s, id){
+         var js, fjs = d.getElementsByTagName(s)[0] as HTMLElement;
+         if (d.getElementById(id)) {return;}
+         js = d.createElement(s) as HTMLScriptElement; js.id = id;
+         js.src = "https://connect.facebook.net/en_US/sdk.js";
+         fjs.parentNode?.insertBefore(js, fjs);
+       }(document, 'script', 'facebook-jssdk'));
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
-  const handleSaveConfig = async () => {
+  // --- Functions ---
+
+  const handleManualSave = async () => {
     if (!accessToken || !phoneId || !wabaId) {
       alert("Please fill all the Meta API details!");
       return;
@@ -63,13 +98,12 @@ export default function ConfigModal({ isOpen, onClose, onSuccess }: ConfigModalP
       if (user) {
         await set(ref(database, `users/${user.uid}/config`), {
           isMatched: true,
-          accessToken: accessToken,
-          phoneId: phoneId,
-          wabaId: wabaId,
+          accessToken, phoneId, wabaId,
           webhookVerifyToken: verifyToken,
-          webhookUrl: webhookUrl,
+          webhookUrl,
           configuredAt: new Date().toISOString(),
-          isWebhookVerified: false 
+          isWebhookVerified: false,
+          setupType: "manual" // पता चले कि मैनुअल किया है
         });
         
         onSuccess(); 
@@ -82,11 +116,26 @@ export default function ConfigModal({ isOpen, onClose, onSuccess }: ConfigModalP
     setLoading(false);
   };
 
-  // बिना Alert वाला स्मार्ट कॉपी फंक्शन
+  const handleFacebookLogin = () => {
+    window.FB.login((response: any) => {
+      if (response.authResponse) {
+        const token = response.authResponse.accessToken;
+        console.log('Embedded Login Success! Token:', token);
+        // TODO: यहाँ से इस टोकन को बैकएंड पर भेजना है ताकि वो WABA ID और Phone ID निकाल सके
+        alert("Facebook Link Successful! Now we need to fetch WABA ID from backend.");
+      } else {
+        console.log('User cancelled login or did not fully authorize.');
+      }
+    }, {
+      scope: 'business_management,whatsapp_business_management,whatsapp_business_messaging',
+      extras: { feature: 'whatsapp_embedded_signup' }
+    });
+  };
+
   const handleCopy = (text: string, field: string) => {
     navigator.clipboard.writeText(text);
     setCopiedField(field);
-    setTimeout(() => setCopiedField(null), 2000); // 2 सेकंड बाद वापस Copy आइकॉन आ जाएगा
+    setTimeout(() => setCopiedField(null), 2000); 
   };
 
   return (
@@ -101,7 +150,7 @@ export default function ConfigModal({ isOpen, onClose, onSuccess }: ConfigModalP
             </div>
             <div>
               <h2 className="text-xl font-bold text-gray-800">Link Meta API</h2>
-              <p className="text-sm text-gray-500 font-medium">Configure your WhatsApp Business Account</p>
+              <p className="text-sm text-gray-500 font-medium">Connect your WhatsApp Business</p>
             </div>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700 bg-gray-50 hover:bg-gray-100 p-2 rounded-full transition-colors">
@@ -109,100 +158,122 @@ export default function ConfigModal({ isOpen, onClose, onSuccess }: ConfigModalP
           </button>
         </div>
 
-        {/* Body - Input Fields */}
-        <div className="p-6 space-y-5 overflow-y-auto max-h-[65vh] bg-gray-50/50">
-          <div className="space-y-1.5">
-            <label className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
-              <Key className="w-4 h-4 text-gray-500" /> Permanent Access Token
-            </label>
-            <input 
-              type="password" 
-              value={accessToken}
-              onChange={(e) => setAccessToken(e.target.value)}
-              placeholder="EAAGm0P..." 
-              className="w-full bg-white border border-gray-200 text-gray-900 rounded-xl px-4 py-3 outline-none focus:ring-4 focus:ring-green-500/10 focus:border-green-500 text-sm font-medium transition-all shadow-sm"
-            />
-          </div>
-
-          <div className="flex gap-4">
-            <div className="space-y-1.5 flex-1">
-              <label className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
-                <Phone className="w-4 h-4 text-gray-500" /> Phone Number ID
-              </label>
-              <input 
-                type="text" 
-                value={phoneId}
-                onChange={(e) => setPhoneId(e.target.value)}
-                placeholder="103456789..." 
-                className="w-full bg-white border border-gray-200 text-gray-900 rounded-xl px-4 py-3 outline-none focus:ring-4 focus:ring-green-500/10 focus:border-green-500 text-sm font-medium transition-all shadow-sm"
-              />
-            </div>
-            <div className="space-y-1.5 flex-1">
-              <label className="text-sm font-semibold text-gray-700">WABA ID</label>
-              <input 
-                type="text" 
-                value={wabaId}
-                onChange={(e) => setWabaId(e.target.value)}
-                placeholder="105678901..." 
-                className="w-full bg-white border border-gray-200 text-gray-900 rounded-xl px-4 py-3 outline-none focus:ring-4 focus:ring-green-500/10 focus:border-green-500 text-sm font-medium transition-all shadow-sm"
-              />
-            </div>
-          </div>
-
-          <div className="mt-6 pt-5 border-t border-gray-200 space-y-4">
-            <div className="flex items-start gap-3 bg-blue-50/80 p-4 rounded-2xl border border-blue-100">
-              <ShieldAlert className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
-              <p className="text-sm text-blue-800 leading-relaxed font-medium">
-                Put these details in your Meta Developer Dashboard <strong>Webhooks</strong> section to verify your app.
-              </p>
-            </div>
-            
-            <div className="space-y-1.5">
-              <label className="text-sm font-semibold text-gray-700">Your Webhook Callback URL</label>
-              <div className="flex bg-white border border-gray-200 rounded-xl overflow-hidden focus-within:ring-4 focus-within:ring-gray-100 focus-within:border-gray-300 transition-all shadow-sm group">
-                <input type="text" readOnly value={webhookUrl} className="flex-1 bg-transparent px-4 py-3 text-sm outline-none text-gray-600 font-medium" />
-                <button 
-                  onClick={() => handleCopy(webhookUrl, 'url')} 
-                  className="px-5 border-l border-gray-200 bg-gray-50 hover:bg-gray-100 transition-colors flex items-center justify-center text-gray-600 group-hover:text-gray-900"
-                >
-                  {copiedField === 'url' ? <Check className="w-5 h-5 text-green-500" /> : <Copy className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-sm font-semibold text-gray-700">Auto-Generated Verify Token</label>
-              <div className="flex bg-white border border-gray-200 rounded-xl overflow-hidden focus-within:ring-4 focus-within:ring-green-500/10 focus-within:border-green-300 transition-all shadow-sm group">
-                <input type="text" readOnly value={verifyToken} className="flex-1 bg-transparent px-4 py-3 text-sm outline-none text-[#25D366] font-bold font-mono tracking-wide" />
-                <button 
-                  onClick={() => handleCopy(verifyToken, 'token')} 
-                  className="px-5 border-l border-gray-200 bg-gray-50 hover:bg-gray-100 transition-colors flex items-center justify-center text-gray-600 group-hover:text-gray-900"
-                >
-                  {copiedField === 'token' ? <Check className="w-5 h-5 text-green-500" /> : <Copy className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="p-6 border-t border-gray-100 bg-white flex justify-end gap-3 rounded-b-3xl">
-          <button onClick={onClose} className="px-6 py-3 rounded-xl font-semibold text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-all">Cancel</button>
+        {/* Tabs (Auto vs Manual) */}
+        <div className="flex px-6 pt-4 gap-4 bg-gray-50/50">
           <button 
-            onClick={handleSaveConfig}
-            disabled={loading}
-            className="flex items-center gap-2 bg-[#25D366] text-white px-7 py-3 rounded-xl font-bold hover:bg-[#20b858] hover:shadow-lg hover:shadow-green-500/20 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={() => setSetupMode("auto")}
+            className={`flex-1 py-2 text-sm font-bold border-b-2 transition-all ${setupMode === "auto" ? "border-[#25D366] text-[#25D366]" : "border-transparent text-gray-400 hover:text-gray-600"}`}
           >
-            {loading ? (
-              <span className="flex items-center gap-2">
-                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span> 
-                Saving...
-              </span>
-            ) : (
-              <><CheckCircle2 className="w-5 h-5" /> Save & Link</>
-            )}
+            Quick Connect (Auto)
+          </button>
+          <button 
+            onClick={() => setSetupMode("manual")}
+            className={`flex-1 py-2 text-sm font-bold border-b-2 transition-all ${setupMode === "manual" ? "border-[#25D366] text-[#25D366]" : "border-transparent text-gray-400 hover:text-gray-600"}`}
+          >
+            Manual Setup
           </button>
         </div>
+
+        {/* Body */}
+        <div className="p-6 overflow-y-auto max-h-[65vh] bg-gray-50/50">
+          
+          {/* AUTO MODE UI */}
+          {setupMode === "auto" && (
+            <div className="flex flex-col items-center justify-center py-8 space-y-6 text-center">
+              <div className="bg-blue-50 p-4 rounded-full">
+                <Facebook className="w-10 h-10 text-blue-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-gray-800">1-Click WhatsApp Setup</h3>
+                <p className="text-sm text-gray-500 mt-2 max-w-xs mx-auto">
+                  Log in with Facebook to automatically link your WhatsApp Business account and API keys. No coding required.
+                </p>
+              </div>
+              <button 
+                onClick={handleFacebookLogin}
+                className="flex items-center gap-2 bg-[#1877F2] text-white px-8 py-3.5 rounded-xl font-bold hover:bg-[#166FE5] hover:shadow-lg hover:shadow-blue-500/30 active:scale-95 transition-all"
+              >
+                <Facebook className="w-5 h-5" /> Continue with Facebook
+              </button>
+            </div>
+          )}
+
+          {/* MANUAL MODE UI (तुम्हारा पुराना फॉर्म) */}
+          {setupMode === "manual" && (
+            <div className="space-y-5 animate-in fade-in slide-in-from-bottom-2 duration-300">
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
+                  <Key className="w-4 h-4 text-gray-500" /> Permanent Access Token
+                </label>
+                <input 
+                  type="password" value={accessToken} onChange={(e) => setAccessToken(e.target.value)}
+                  placeholder="EAAGm0P..." className="w-full bg-white border border-gray-200 text-gray-900 rounded-xl px-4 py-3 outline-none focus:ring-4 focus:ring-green-500/10 focus:border-green-500 text-sm font-medium transition-all shadow-sm"
+                />
+              </div>
+
+              <div className="flex gap-4">
+                <div className="space-y-1.5 flex-1">
+                  <label className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
+                    <Phone className="w-4 h-4 text-gray-500" /> Phone Number ID
+                  </label>
+                  <input 
+                    type="text" value={phoneId} onChange={(e) => setPhoneId(e.target.value)}
+                    placeholder="103456789..." className="w-full bg-white border border-gray-200 text-gray-900 rounded-xl px-4 py-3 outline-none focus:ring-4 focus:ring-green-500/10 focus:border-green-500 text-sm font-medium transition-all shadow-sm"
+                  />
+                </div>
+                <div className="space-y-1.5 flex-1">
+                  <label className="text-sm font-semibold text-gray-700">WABA ID</label>
+                  <input 
+                    type="text" value={wabaId} onChange={(e) => setWabaId(e.target.value)}
+                    placeholder="105678901..." className="w-full bg-white border border-gray-200 text-gray-900 rounded-xl px-4 py-3 outline-none focus:ring-4 focus:ring-green-500/10 focus:border-green-500 text-sm font-medium transition-all shadow-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-6 pt-5 border-t border-gray-200 space-y-4">
+                <div className="flex items-start gap-3 bg-blue-50/80 p-4 rounded-2xl border border-blue-100">
+                  <ShieldAlert className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
+                  <p className="text-sm text-blue-800 leading-relaxed font-medium">
+                    Put these details in your Meta Developer Dashboard <strong>Webhooks</strong> section.
+                  </p>
+                </div>
+                
+                <div className="space-y-1.5">
+                  <label className="text-sm font-semibold text-gray-700">Webhook URL</label>
+                  <div className="flex bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm group">
+                    <input type="text" readOnly value={webhookUrl} className="flex-1 bg-transparent px-4 py-3 text-sm outline-none text-gray-600 font-medium" />
+                    <button onClick={() => handleCopy(webhookUrl, 'url')} className="px-5 border-l border-gray-200 bg-gray-50 hover:bg-gray-100 transition-colors">
+                      {copiedField === 'url' ? <Check className="w-5 h-5 text-green-500" /> : <Copy className="w-4 h-4 text-gray-600" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-sm font-semibold text-gray-700">Verify Token</label>
+                  <div className="flex bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm group">
+                    <input type="text" readOnly value={verifyToken} className="flex-1 bg-transparent px-4 py-3 text-sm outline-none text-[#25D366] font-bold font-mono" />
+                    <button onClick={() => handleCopy(verifyToken, 'token')} className="px-5 border-l border-gray-200 bg-gray-50 hover:bg-gray-100 transition-colors">
+                      {copiedField === 'token' ? <Check className="w-5 h-5 text-green-500" /> : <Copy className="w-4 h-4 text-gray-600" />}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer (सिर्फ Manual Mode में दिखेगा) */}
+        {setupMode === "manual" && (
+          <div className="p-6 border-t border-gray-100 bg-white flex justify-end gap-3 rounded-b-3xl">
+            <button onClick={onClose} className="px-6 py-3 rounded-xl font-semibold text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-all">Cancel</button>
+            <button 
+              onClick={handleManualSave} disabled={loading}
+              className="flex items-center gap-2 bg-[#25D366] text-white px-7 py-3 rounded-xl font-bold hover:bg-[#20b858] hover:shadow-lg hover:shadow-green-500/20 active:scale-95 transition-all disabled:opacity-50"
+            >
+              {loading ? "Saving..." : <><CheckCircle2 className="w-5 h-5" /> Save & Link</>}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
