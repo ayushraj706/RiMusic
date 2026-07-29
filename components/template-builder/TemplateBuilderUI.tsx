@@ -23,17 +23,14 @@ import {
   Send,
   Loader2,
   ArrowLeft,
-  Plus,
   RefreshCw,
   Pencil,
   Eye,
   X,
-  ChevronUp,
-  ChevronDown,
   ImageUp,
   Paperclip,
   Smartphone,
-  Bell,
+  HelpCircle,
 } from "lucide-react";
 
 import {
@@ -513,7 +510,6 @@ function CreateTemplateForm({
     buttons: [],
   });
 
-  // Mobile preview drawer state
   const [showMobilePreview, setShowMobilePreview] = useState(false);
 
   useEffect(() => {
@@ -616,7 +612,6 @@ function CreateTemplateForm({
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Validation badge — hidden on very small screens */}
           <div className={`hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${
             validation.isValid
               ? "bg-[#ECFDF5] text-[#065F46] border-[#A7F3D0]"
@@ -626,7 +621,6 @@ function CreateTemplateForm({
             {validation.isValid ? "Valid" : `${validation.errors.length} Errors`}
           </div>
 
-          {/* Mobile: Preview toggle button */}
           <button
             onClick={() => setShowMobilePreview(true)}
             className="lg:hidden flex items-center gap-1.5 px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs font-bold text-gray-700 transition"
@@ -655,7 +649,6 @@ function CreateTemplateForm({
 
       {/* ── Body ── */}
       <div className="flex flex-col lg:flex-row flex-1 overflow-hidden">
-        {/* Left: Form */}
         <div className="flex-1 overflow-y-auto px-4 lg:px-8 py-6 space-y-5 pb-20">
 
           {/* Identity */}
@@ -694,14 +687,14 @@ function CreateTemplateForm({
                 </select>
               </div>
               <div>
-                <label className="text-[12px] font-bold text-gray-700 mb-1.5 block">Language</label>
+                <label className="text-[12px] font-bold text-gray-700 mb-1.5 block">Language (Strict Meta Code)</label>
                 <select
                   className={InputCls}
                   value={form.language}
                   onChange={(e) => setField("language", e.target.value)}
                 >
                   {Object.entries(TemplateLanguage).map(([k, v]) => (
-                    <option key={v} value={v}>{k.replace(/_/g, " ")}</option>
+                    <option key={v} value={v}>{k.replace(/_/g, " ")} ({v})</option>
                   ))}
                 </select>
               </div>
@@ -759,9 +752,18 @@ function CreateTemplateForm({
 
           {/* Body */}
           <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
-            <h2 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-4 flex items-center gap-2">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-3 flex items-center gap-2">
               <Type className="w-4 h-4 text-[#25D366]" /> Message Body
             </h2>
+            
+            {/* Meta Variable Instruction Box */}
+            <div className="mb-4 bg-[#F0FDF4] border border-[#BBF7D0] rounded-xl p-3 flex items-start gap-2.5">
+              <HelpCircle className="w-4 h-4 text-[#16A34A] flex-shrink-0 mt-0.5" />
+              <div className="text-[11px] text-[#166534] leading-relaxed">
+                <span className="font-bold">Meta Variable Rule:</span> Always use sequential variables like <code className="bg-white px-1 py-0.5 rounded border border-[#86EFAC] font-mono">&#123;&#123;1&#125;&#125;</code>, <code className="bg-white px-1 py-0.5 rounded border border-[#86EFAC] font-mono">&#123;&#123;2&#125;&#125;</code>. Do not skip numbers (e.g. going from 1 to 3) to prevent template rejection from Meta.
+              </div>
+            </div>
+
             <label className="flex justify-between text-[12px] font-bold text-gray-700 mb-1.5">
               Body Text{" "}
               <span className={`${form.bodyText.length > bodyCharLimit ? "text-red-500 font-bold" : "text-gray-400"} font-normal`}>
@@ -822,7 +824,7 @@ function CreateTemplateForm({
                 onClick={() => addButton(ButtonType.URL)}
                 className="flex items-center gap-1.5 px-3 py-1.5 border border-dashed border-gray-300 rounded-lg text-xs font-bold text-gray-600 hover:bg-gray-50 hover:border-[#25D366] hover:text-[#25D366] transition-all"
               >
-                <ExternalLink className="w-3.5 h-3.5" /> URL Button
+                <ExternalLink className="w-3.5 h-3.5" /> URL / Video Link
               </button>
               <button
                 onClick={() => addButton(ButtonType.PHONE_NUMBER)}
@@ -842,7 +844,7 @@ function CreateTemplateForm({
                   </button>
                   <p className="text-[11px] font-extrabold text-gray-500 uppercase tracking-widest mb-3 flex items-center gap-1.5">
                     {btn.type === ButtonType.QUICK_REPLY ? <><CornerUpLeft className="w-3.5 h-3.5" /> Quick Reply</> :
-                     btn.type === ButtonType.URL ? <><ExternalLink className="w-3.5 h-3.5" /> URL Button</> :
+                     btn.type === ButtonType.URL ? <><ExternalLink className="w-3.5 h-3.5" /> URL / Video Action</> :
                      <><Phone className="w-3.5 h-3.5" /> Phone</>} #{idx + 1}
                   </p>
                   <div className="mb-3">
@@ -859,7 +861,7 @@ function CreateTemplateForm({
                   </div>
                   {btn.type === ButtonType.URL && (
                     <div>
-                      <label className="text-[11px] font-bold text-gray-700 block mb-1">URL Link</label>
+                      <label className="text-[11px] font-bold text-gray-700 block mb-1">URL Link (Website or Video)</label>
                       <input
                         className={InputCls}
                         value={btn.url}
@@ -869,7 +871,7 @@ function CreateTemplateForm({
                   )}
                   {btn.type === ButtonType.PHONE_NUMBER && (
                     <div>
-                      <label className="text-[11px] font-bold text-gray-700 block mb-1">Phone (E.164)</label>
+                      <label className="text-[11px] font-bold text-gray-700 block mb-1">Phone (E.164 format)</label>
                       <input
                         className={InputCls}
                         value={btn.phone_number}
@@ -921,18 +923,14 @@ function CreateTemplateForm({
       {/* ── Mobile Preview Bottom Sheet ── */}
       {showMobilePreview && (
         <div className="lg:hidden fixed inset-0 z-50 flex flex-col">
-          {/* Backdrop */}
           <div
             className="flex-1 bg-black/60"
             onClick={() => setShowMobilePreview(false)}
           />
-          {/* Sheet */}
           <div className="bg-white rounded-t-3xl shadow-2xl max-h-[92vh] overflow-y-auto">
-            {/* Handle */}
             <div className="flex justify-center pt-3 pb-1">
               <div className="w-10 h-1 bg-gray-300 rounded-full" />
             </div>
-            {/* Sheet Header */}
             <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
               <div className="flex items-center gap-2">
                 <Smartphone className="w-4 h-4 text-[#25D366]" />
@@ -948,10 +946,8 @@ function CreateTemplateForm({
                 <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
-            {/* Phone mockup centered */}
             <div className="flex flex-col items-center py-6 px-4">
               <PhoneMockup form={form} />
-              {/* Payload info */}
               <div className="w-full max-w-[300px] mt-6 bg-[#F9FAFB] border border-gray-200 rounded-xl p-4">
                 <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Payload Info</h3>
                 <div className="grid grid-cols-2 gap-3">
@@ -973,7 +969,6 @@ function CreateTemplateForm({
                   </div>
                 </div>
               </div>
-              {/* Close CTA */}
               <button
                 onClick={() => setShowMobilePreview(false)}
                 className="mt-5 w-full max-w-[300px] py-3 bg-gray-100 hover:bg-gray-200 rounded-xl text-sm font-bold text-gray-700 transition"
@@ -1003,7 +998,7 @@ export default function TemplateBuilderUI() {
   const [editTemplate, setEditTemplate] = useState<any>(null);
   const [filterCategory, setFilterCategory] = useState<string>("ALL");
 
-  // Firebase config
+  // Firebase config sync (Token & WABA ID fetched securely from user config node)
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       if (currentUser) {
@@ -1013,7 +1008,7 @@ export default function TemplateBuilderUI() {
             setWabaId(snapshot.val().wabaId);
             setAccessToken(snapshot.val().accessToken);
           } else {
-            setErrorMsg("Please link your Meta API in Settings first.");
+            setErrorMsg("Please link your Meta API credentials in Settings first.");
             setLoading(false);
           }
         });
@@ -1116,7 +1111,6 @@ export default function TemplateBuilderUI() {
     return counts;
   }, [templates]);
 
-  // Edit view
   if (editTemplate) {
     return (
       <CreateTemplateForm
@@ -1127,26 +1121,23 @@ export default function TemplateBuilderUI() {
     );
   }
 
-  // Create view
   if (currentStep === "create") {
     return <CreateTemplateForm onSave={handleSaveTemplateToMeta} onBack={() => router.back()} />;
   }
 
-  // ── List View ──
   return (
     <div className="min-h-screen bg-[#F4F7F6] text-gray-900 font-sans pb-20">
       {viewTemplate && (
         <TemplateViewModal template={viewTemplate} onClose={() => setViewTemplate(null)} />
       )}
 
-      {/* Header — Waplify-style */}
+      {/* Header */}
       <div className="flex items-center justify-between px-5 lg:px-6 py-4 border-b border-gray-200 bg-white sticky top-0 z-10 shadow-sm">
         <div>
           <h1 className="text-[17px] font-bold text-gray-800">Message Templates</h1>
           <p className="text-xs text-gray-400 mt-0.5">Manage and create official Meta templates.</p>
         </div>
         <div className="flex items-center gap-2">
-          {/* Sync / Refresh */}
           <button
             onClick={fetchTemplates}
             disabled={!wabaId || loading}
@@ -1157,19 +1148,17 @@ export default function TemplateBuilderUI() {
             <span className="hidden sm:inline">Sync</span>
           </button>
 
-          {/* Create Template — dark button like Waplify */}
           <button
             onClick={() => router.push("?step=create")}
             disabled={!wabaId}
             className="flex items-center gap-1.5 px-4 py-2 bg-gray-900 hover:bg-gray-800 text-white rounded-lg text-xs font-bold transition disabled:opacity-50 shadow-sm"
           >
-            <Plus className="w-3.5 h-3.5" />
             <span>Create Template</span>
           </button>
         </div>
       </div>
 
-      {/* Category Filter Bar — Waplify pill style */}
+      {/* Category Filter Bar */}
       <div className="px-5 lg:px-6 pt-4 max-w-5xl mx-auto">
         <div className="flex flex-wrap gap-2">
           {(["ALL", ...Object.values(TemplateCategory)] as string[]).map((cat) => (
@@ -1182,7 +1171,6 @@ export default function TemplateBuilderUI() {
                   : "bg-white text-gray-600 border-gray-200 hover:border-[#25D366] hover:text-[#25D366]"
               }`}
             >
-              {/* Dot indicator like Waplify */}
               {cat !== "ALL" && filterCategory !== cat && (
                 <span className={`w-1.5 h-1.5 rounded-full ${
                   cat === "MARKETING" ? "bg-orange-400" :
@@ -1294,16 +1282,6 @@ export default function TemplateBuilderUI() {
           </div>
         )}
       </div>
-
-      {/* FAB — mobile only (desktop has header button) */}
-      <button
-        onClick={() => router.push("?step=create")}
-        disabled={!wabaId}
-        className="lg:hidden fixed bottom-6 right-6 bg-[#25D366] text-white p-4 rounded-full shadow-[0_8px_20px_rgba(37,211,102,0.3)] hover:bg-[#1DA851] hover:-translate-y-1 transition-all z-20 flex items-center justify-center disabled:opacity-50 disabled:hover:translate-y-0"
-        title="Create New Template"
-      >
-        <Plus className="w-6 h-6" />
-      </button>
     </div>
   );
 }
