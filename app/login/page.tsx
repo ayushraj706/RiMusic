@@ -1,11 +1,32 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { signInWithPopup, onAuthStateChanged } from "firebase/auth";
-import { auth, googleProvider, facebookProvider, githubProvider, twitterProvider } from "../../lib/firebase"; 
-// Naye icons import kiye hain cluster animation ke liye
-import { KeyRound, MessageCircle, Globe, Lock, MessageSquare } from "lucide-react"; 
-import { motion, AnimatePresence } from "framer-motion";
+import { 
+  useEffect, 
+  useState 
+} from "react";
+import { 
+  signInWithPopup, 
+  onAuthStateChanged 
+} from "firebase/auth";
+import { 
+  auth, 
+  googleProvider, 
+  facebookProvider, 
+  githubProvider, 
+  twitterProvider, 
+  linkedInProvider // Naya LinkedIn Provider add kiya hai
+} from "../../lib/firebase"; 
+import { 
+  KeyRound, 
+  MessageCircle, 
+  Globe, 
+  Lock, 
+  MessageSquare 
+} from "lucide-react"; 
+import { 
+  motion, 
+  AnimatePresence 
+} from "framer-motion";
 
 export default function LoginPage() {
   const [isMounted, setIsMounted] = useState(false);
@@ -43,28 +64,46 @@ export default function LoginPage() {
     try { 
       const res = await signInWithPopup(auth, googleProvider); 
       if (res.user) window.location.href = "/"; 
-    } catch (error: any) { alert("Google Error: " + error.message); }
+    } catch (error: any) { 
+      alert("Google Error: " + error.message); 
+    }
   };
 
   const handleFacebookLogin = async () => {
     try { 
       const res = await signInWithPopup(auth, facebookProvider); 
       if (res.user) window.location.href = "/"; 
-    } catch (error: any) { alert("Facebook Error: " + error.message); }
+    } catch (error: any) { 
+      alert("Facebook Error: " + error.message); 
+    }
   };
 
   const handleGithubLogin = async () => {
     try { 
       const res = await signInWithPopup(auth, githubProvider); 
       if (res.user) window.location.href = "/"; 
-    } catch (error: any) { alert("GitHub Error: " + error.message); }
+    } catch (error: any) { 
+      alert("GitHub Error: " + error.message); 
+    }
   };
 
   const handleTwitterLogin = async () => {
     try { 
       const res = await signInWithPopup(auth, twitterProvider); 
       if (res.user) window.location.href = "/"; 
-    } catch (error: any) { alert("X Error: " + error.message); }
+    } catch (error: any) { 
+      alert("X Error: " + error.message); 
+    }
+  };
+
+  // Naya LinkedIn Login Handler (Bina koi purana code mitaye)
+  const handleLinkedInLogin = async () => {
+    try { 
+      const res = await signInWithPopup(auth, linkedInProvider); 
+      if (res.user) window.location.href = "/"; 
+    } catch (error: any) { 
+      alert("LinkedIn Error: " + error.message); 
+    }
   };
 
   if (!isMounted) return null; 
@@ -201,10 +240,19 @@ export default function LoginPage() {
 
             <motion.div 
               className="space-y-2.5" 
-              initial="hidden" animate="visible" 
+              initial="hidden" 
+              animate="visible" 
               transition={{ staggerChildren: 0.1, delayChildren: 0.4 }}
             >
-              <motion.button variants={itemVariants} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={handleGoogleLogin} className="w-full flex items-center justify-center gap-3 bg-white border border-gray-200 text-gray-950 py-3 px-6 rounded-xl hover:bg-gray-50 transition-colors shadow-sm">
+              
+              {/* Google Button */}
+              <motion.button 
+                variants={itemVariants} 
+                whileHover={{ scale: 1.02 }} 
+                whileTap={{ scale: 0.98 }} 
+                onClick={handleGoogleLogin} 
+                className="w-full flex items-center justify-center gap-3 bg-white border border-gray-200 text-gray-950 py-3 px-6 rounded-xl hover:bg-gray-50 transition-colors shadow-sm"
+              >
                 <svg width="18" height="18" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M19.6429 10.2273C19.6429 9.51705 19.5771 8.83523 19.4583 8.18182H10V12.0568H15.4036C15.1718 13.3068 14.4668 14.3636 13.4079 15.0739V17.5852H16.6393C18.5293 15.8466 19.6429 13.2784 19.6429 10.2273Z" fill="#000000"/>
                   <path d="M10 20C12.7 20 14.9621 19.1023 16.6393 17.5852L13.4079 15.0739C12.5111 15.6761 11.3571 16.0341 10 16.0341C7.38929 16.0341 5.17857 14.267 4.38571 11.8977H1.08214V14.4545C2.73 17.7273 6.09821 20 10 20Z" fill="#000000"/>
@@ -214,25 +262,69 @@ export default function LoginPage() {
                 <span className="font-medium text-[14px]">Continue with Google</span>
               </motion.button>
 
-              <motion.button variants={itemVariants} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={handleFacebookLogin} className="w-full flex items-center justify-center gap-3 bg-[#1877F2] text-white py-3 px-6 rounded-xl hover:bg-[#166FE5] transition-colors shadow-sm">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg"><path d="M24 12.073C24 5.405 18.627 0 12 0C5.373 0 0 5.405 0 12.073C0 18.1 4.388 23.094 10.125 24V15.562H7.078V12.073H10.125V9.413C10.125 6.388 11.916 4.714 14.657 4.714C15.97 4.714 17.343 4.95 17.343 4.95V7.935H15.83C14.339 7.935 13.875 8.868 13.875 9.837V12.073H17.203L16.671 15.562H13.875V24C19.612 23.094 24 18.1 24 12.073Z" /></svg>
+              {/* Facebook Button */}
+              <motion.button 
+                variants={itemVariants} 
+                whileHover={{ scale: 1.02 }} 
+                whileTap={{ scale: 0.98 }} 
+                onClick={handleFacebookLogin} 
+                className="w-full flex items-center justify-center gap-3 bg-[#1877F2] text-white py-3 px-6 rounded-xl hover:bg-[#166FE5] transition-colors shadow-sm"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M24 12.073C24 5.405 18.627 0 12 0C5.373 0 0 5.405 0 12.073C0 18.1 4.388 23.094 10.125 24V15.562H7.078V12.073H10.125V9.413C10.125 6.388 11.916 4.714 14.657 4.714C15.97 4.714 17.343 4.95 17.343 4.95V7.935H15.83C14.339 7.935 13.875 8.868 13.875 9.837V12.073H17.203L16.671 15.562H13.875V24C19.612 23.094 24 18.1 24 12.073Z" />
+                </svg>
                 <span className="font-medium text-[14px]">Continue with Facebook</span>
               </motion.button>
 
-              <motion.button variants={itemVariants} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={handleGithubLogin} className="w-full flex items-center justify-center gap-3 bg-[#24292F] text-white py-3 px-6 rounded-xl hover:bg-[#1F2328] transition-colors shadow-sm">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg"><path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.477 2 12C2 16.42 4.87 20.17 8.84 21.5C9.34 21.59 9.5 21.28 9.5 21.01C9.5 20.77 9.49 20.14 9.49 19.31C6.71 19.91 6.12 17.97 6.12 17.97C5.67 16.81 5.03 16.5 5.03 16.5C4.13 15.89 5.09 15.9 5.09 15.9C6.08 15.97 6.59 16.92 6.59 16.92C7.47 18.42 8.89 17.99 9.45 17.74C9.54 17.11 9.79 16.68 10.07 16.44C7.85 16.19 5.52 15.33 5.52 11.45C5.52 10.35 5.91 9.44 6.56 8.73C6.45 8.48 6.12 7.46 6.66 6.07C6.66 6.07 7.5 5.8 9.49 7.15C10.29 6.93 11.14 6.82 12 6.82C12.86 6.82 13.71 6.93 14.51 7.15C16.5 5.8 17.34 6.07 17.34 6.07C17.88 7.46 17.55 8.48 17.44 8.73C18.09 9.44 18.48 10.35 18.48 11.45C18.48 15.34 16.14 16.19 13.91 16.43C14.26 16.73 14.57 17.31 14.57 18.2C14.57 19.47 14.56 20.5 14.56 20.81C14.56 21.08 14.72 21.4 15.22 21.31C19.13 20.17 22 16.42 22 12C22 6.477 17.523 2 12 2Z" /></svg>
+              {/* NEW: LinkedIn Button */}
+              <motion.button 
+                variants={itemVariants} 
+                whileHover={{ scale: 1.02 }} 
+                whileTap={{ scale: 0.98 }} 
+                onClick={handleLinkedInLogin} 
+                className="w-full flex items-center justify-center gap-3 bg-[#0A66C2] text-white py-3 px-6 rounded-xl hover:bg-[#004182] transition-colors shadow-sm border border-[#0A66C2]"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+                </svg>
+                <span className="font-medium text-[14px]">Continue with LinkedIn</span>
+              </motion.button>
+
+              {/* GitHub Button */}
+              <motion.button 
+                variants={itemVariants} 
+                whileHover={{ scale: 1.02 }} 
+                whileTap={{ scale: 0.98 }} 
+                onClick={handleGithubLogin} 
+                className="w-full flex items-center justify-center gap-3 bg-[#24292F] text-white py-3 px-6 rounded-xl hover:bg-[#1F2328] transition-colors shadow-sm"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg">
+                  <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.477 2 12C2 16.42 4.87 20.17 8.84 21.5C9.34 21.59 9.5 21.28 9.5 21.01C9.5 20.77 9.49 20.14 9.49 19.31C6.71 19.91 6.12 17.97 6.12 17.97C5.67 16.81 5.03 16.5 5.03 16.5C4.13 15.89 5.09 15.9 5.09 15.9C6.08 15.97 6.59 16.92 6.59 16.92C7.47 18.42 8.89 17.99 9.45 17.74C9.54 17.11 9.79 16.68 10.07 16.44C7.85 16.19 5.52 15.33 5.52 11.45C5.52 10.35 5.91 9.44 6.56 8.73C6.45 8.48 6.12 7.46 6.66 6.07C6.66 6.07 7.5 5.8 9.49 7.15C10.29 6.93 11.14 6.82 12 6.82C12.86 6.82 13.71 6.93 14.51 7.15C16.5 5.8 17.34 6.07 17.34 6.07C17.88 7.46 17.55 8.48 17.44 8.73C18.09 9.44 18.48 10.35 18.48 11.45C18.48 15.34 16.14 16.19 13.91 16.43C14.26 16.73 14.57 17.31 14.57 18.2C14.57 19.47 14.56 20.5 14.56 20.81C14.56 21.08 14.72 21.4 15.22 21.31C19.13 20.17 22 16.42 22 12C22 6.477 17.523 2 12 2Z" />
+                </svg>
                 <span className="font-medium text-[14px]">Continue with GitHub</span>
               </motion.button>
 
-              <motion.button variants={itemVariants} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={handleTwitterLogin} className="w-full flex items-center justify-center gap-3 bg-black text-white py-3 px-6 rounded-xl hover:bg-gray-900 transition-colors shadow-sm border border-gray-800">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+              {/* Twitter (X) Button */}
+              <motion.button 
+                variants={itemVariants} 
+                whileHover={{ scale: 1.02 }} 
+                whileTap={{ scale: 0.98 }} 
+                onClick={handleTwitterLogin} 
+                className="w-full flex items-center justify-center gap-3 bg-black text-white py-3 px-6 rounded-xl hover:bg-gray-900 transition-colors shadow-sm border border-gray-800"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                </svg>
                 <span className="font-medium text-[14px]">Continue with X</span>
               </motion.button>
+
             </motion.div>
 
             <motion.div 
               className="mt-8 flex items-center justify-center gap-1.5 text-[12px] text-gray-400 font-light"
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }}
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              transition={{ delay: 0.6 }}
             >
               <KeyRound className="w-3.5 h-3.5 stroke-[1.5]" />
               Protected by Firebase Authentication
