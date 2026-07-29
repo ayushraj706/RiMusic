@@ -164,7 +164,7 @@ export default function LoginPage() {
                 <motion.img
                   key="main-logo"
                   layoutId="basekey-logo" 
-                  src="/logo.svg" 
+                  src="/logo.png" // Yahan SVG se PNG kar diya hai
                   alt="BaseKey Logo"
                   className="w-28 h-28 drop-shadow-xl"
                   initial={{ scale: 0.5, opacity: 0 }}
@@ -201,7 +201,7 @@ export default function LoginPage() {
             >
               <motion.img
                 layoutId="basekey-logo" 
-                src="/logo.svg" 
+                src="/logo.png" // Yahan bhi SVG se PNG kar diya hai
                 alt="BaseKey Logo"
                 className="w-16 h-16 drop-shadow-md"
               />
