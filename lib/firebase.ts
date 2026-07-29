@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getDatabase } from "firebase/database"; 
-import { getAuth, GoogleAuthProvider, FacebookAuthProvider, GithubAuthProvider } from "firebase/auth"; // GithubAuthProvider add kiya
+import { getAuth, GoogleAuthProvider, FacebookAuthProvider, GithubAuthProvider, TwitterAuthProvider } from "firebase/auth"; // TwitterAuthProvider add kiya
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -17,10 +17,11 @@ const firebaseConfig = {
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const database = getDatabase(app);
 
-// Google, Facebook, aur GitHub Login ke liye Auth aur Providers initialize kiya
+// Google, Facebook, GitHub, aur X (Twitter) Login ke liye Auth aur Providers initialize kiya
 const auth = getAuth(app);
 const googleProvider = new GoogleAuthProvider();
 const facebookProvider = new FacebookAuthProvider(); 
-const githubProvider = new GithubAuthProvider(); // Naya GitHub Provider add kiya
+const githubProvider = new GithubAuthProvider(); 
+const twitterProvider = new TwitterAuthProvider(); // Naya X (Twitter) Provider add kiya
 
-export { app, database, auth, googleProvider, facebookProvider, githubProvider }; // Export mein githubProvider add kiya
+export { app, database, auth, googleProvider, facebookProvider, githubProvider, twitterProvider }; // Export mein twitterProvider add kiya
