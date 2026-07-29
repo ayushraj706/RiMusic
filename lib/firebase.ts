@@ -1,6 +1,13 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getDatabase } from "firebase/database"; 
-import { getAuth, GoogleAuthProvider, FacebookAuthProvider, GithubAuthProvider, TwitterAuthProvider } from "firebase/auth"; // TwitterAuthProvider add kiya
+import { 
+  getAuth, 
+  GoogleAuthProvider, 
+  FacebookAuthProvider, 
+  GithubAuthProvider, 
+  TwitterAuthProvider,
+  OAuthProvider // Naya import LinkedIn (OIDC) ke liye
+} from "firebase/auth"; 
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -17,11 +24,23 @@ const firebaseConfig = {
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const database = getDatabase(app);
 
-// Google, Facebook, GitHub, aur X (Twitter) Login ke liye Auth aur Providers initialize kiya
+// Auth aur Providers initialize kiya
 const auth = getAuth(app);
 const googleProvider = new GoogleAuthProvider();
 const facebookProvider = new FacebookAuthProvider(); 
 const githubProvider = new GithubAuthProvider(); 
-const twitterProvider = new TwitterAuthProvider(); // Naya X (Twitter) Provider add kiya
+const twitterProvider = new TwitterAuthProvider(); 
 
-export { app, database, auth, googleProvider, facebookProvider, githubProvider, twitterProvider }; // Export mein twitterProvider add kiya
+// Naya LinkedIn Provider (Custom OAuth / OIDC Provider)
+const linkedInProvider = new OAuthProvider('oidc.linkedin');
+
+export { 
+  app, 
+  database, 
+  auth, 
+  googleProvider, 
+  facebookProvider, 
+  githubProvider, 
+  twitterProvider,
+  linkedInProvider // Export mein add kiya
+};
