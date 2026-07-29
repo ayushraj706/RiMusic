@@ -3,14 +3,14 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { signInWithPopup, onAuthStateChanged } from "firebase/auth";
-import { auth, googleProvider, facebookProvider } from "../../lib/firebase"; 
-import { KeyRound, MessageSquare, Loader2 } from "lucide-react";
+import { auth, googleProvider, facebookProvider, githubProvider } from "../../lib/firebase"; 
+import { KeyRound, MessageCircle, Loader2 } from "lucide-react"; // MessageSquare ki jagah MessageCircle import kiya
 import { motion } from "framer-motion";
 
 export default function LoginPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [isMounted, setIsMounted] = useState(false); // Yeh naya state add kiya hai
+  const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
     setIsMounted(true); // Hydration fix
@@ -27,20 +27,30 @@ export default function LoginPage() {
   const handleGoogleLogin = async () => {
     try {
       await signInWithPopup(auth, googleProvider);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Google Login Failed:", error);
+      alert("Google Error: " + error.message);
     }
   };
 
   const handleFacebookLogin = async () => {
     try {
       await signInWithPopup(auth, facebookProvider);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Facebook Login Failed:", error);
+      alert("Facebook Error: " + error.message);
     }
   };
 
-  // Jab tak page theek se load na ho, tab tak Loader dikhao (White box/crash fix)
+  const handleGithubLogin = async () => {
+    try {
+      await signInWithPopup(auth, githubProvider);
+    } catch (error: any) {
+      console.error("GitHub Login Failed:", error);
+      alert("GitHub Error: " + error.message);
+    }
+  };
+
   if (!isMounted || loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#FAFAFA] text-black">
@@ -49,7 +59,6 @@ export default function LoginPage() {
     );
   }
 
-  // Animation Variants
   const containerVariants = {
     hidden: { opacity: 0, y: 20 },
     visible: { 
@@ -72,14 +81,15 @@ export default function LoginPage() {
         animate="visible"
         variants={containerVariants}
       >
-        {/* Floating Logo Animation */}
+        {/* Floating Logo Animation - WhatsApp Style */}
         <motion.div 
-          className="w-20 h-20 mx-auto rounded-2xl bg-gray-50 flex items-center justify-center mb-8 border border-gray-100 shadow-inner"
+          className="w-20 h-20 mx-auto rounded-full bg-[#25D366]/10 flex items-center justify-center mb-8 border border-[#25D366]/20 shadow-inner"
           variants={itemVariants}
           animate={{ y: [0, -8, 0] }} // Floating effect
           transition={{ repeat: Infinity, duration: 3, ease: "easeInOut" }}
         >
-          <MessageSquare className="w-10 h-10 text-gray-900 stroke-[1.5]" />
+          {/* WhatsApp jaisa gol icon */}
+          <MessageCircle className="w-10 h-10 text-[#25D366] stroke-[1.5]" /> 
         </motion.div>
         
         <motion.h1 
@@ -124,6 +134,19 @@ export default function LoginPage() {
               <path d="M24 12.073C24 5.405 18.627 0 12 0C5.373 0 0 5.405 0 12.073C0 18.1 4.388 23.094 10.125 24V15.562H7.078V12.073H10.125V9.413C10.125 6.388 11.916 4.714 14.657 4.714C15.97 4.714 17.343 4.95 17.343 4.95V7.935H15.83C14.339 7.935 13.875 8.868 13.875 9.837V12.073H17.203L16.671 15.562H13.875V24C19.612 23.094 24 18.1 24 12.073Z" />
             </svg>
             <span className="font-medium text-[15px]">Continue with Facebook</span>
+          </motion.button>
+
+          {/* GitHub Button */}
+          <motion.button 
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={handleGithubLogin}
+            className="w-full flex items-center justify-center gap-3 bg-[#24292F] text-white py-3.5 px-6 rounded-xl hover:bg-[#1F2328] transition-colors shadow-sm"
+          >
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg">
+              <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.477 2 12C2 16.42 4.87 20.17 8.84 21.5C9.34 21.59 9.5 21.28 9.5 21.01C9.5 20.77 9.49 20.14 9.49 19.31C6.71 19.91 6.12 17.97 6.12 17.97C5.67 16.81 5.03 16.5 5.03 16.5C4.13 15.89 5.09 15.9 5.09 15.9C6.08 15.97 6.59 16.92 6.59 16.92C7.47 18.42 8.89 17.99 9.45 17.74C9.54 17.11 9.79 16.68 10.07 16.44C7.85 16.19 5.52 15.33 5.52 11.45C5.52 10.35 5.91 9.44 6.56 8.73C6.45 8.48 6.12 7.46 6.66 6.07C6.66 6.07 7.5 5.8 9.49 7.15C10.29 6.93 11.14 6.82 12 6.82C12.86 6.82 13.71 6.93 14.51 7.15C16.5 5.8 17.34 6.07 17.34 6.07C17.88 7.46 17.55 8.48 17.44 8.73C18.09 9.44 18.48 10.35 18.48 11.45C18.48 15.34 16.14 16.19 13.91 16.43C14.26 16.73 14.57 17.31 14.57 18.2C14.57 19.47 14.56 20.5 14.56 20.81C14.56 21.08 14.72 21.4 15.22 21.31C19.13 20.17 22 16.42 22 12C22 6.477 17.523 2 12 2Z" />
+            </svg>
+            <span className="font-medium text-[15px]">Continue with GitHub</span>
           </motion.button>
         </motion.div>
 
