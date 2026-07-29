@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { database, auth } from "../lib/firebase";
 import { ref, set } from "firebase/database";
-import { X, Key, Phone, Link2, CheckCircle2, Copy, ShieldAlert } from "lucide-react";
+import { X, Key, Phone, Link2, CheckCircle2, Copy, ShieldAlert, Check } from "lucide-react";
 
 interface ConfigModalProps {
   isOpen: boolean;
@@ -16,7 +16,9 @@ export default function ConfigModal({ isOpen, onClose, onSuccess }: ConfigModalP
   const [phoneId, setPhoneId] = useState("");
   const [wabaId, setWabaId] = useState(""); 
   const [verifyToken, setVerifyToken] = useState("");
+  const [webhookUrl, setWebhookUrl] = useState("");
   const [loading, setLoading] = useState(false);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -29,6 +31,10 @@ export default function ConfigModal({ isOpen, onClose, onSuccess }: ConfigModalP
       setPhoneId(savedPhone);
       setWabaId(savedWaba);
 
+      // डायनामिक Webhook URL (Localhost और Vercel दोनों पर काम करेगा)
+      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || window.location.origin;
+      setWebhookUrl(`${baseUrl}/api/webhook`);
+
       if (savedVerifyToken) {
         setVerifyToken(savedVerifyToken);
       } else {
@@ -39,8 +45,6 @@ export default function ConfigModal({ isOpen, onClose, onSuccess }: ConfigModalP
   }, [isOpen]);
 
   if (!isOpen) return null;
-
-  const webhookUrl = "https://ri-music.vercel.app/api/webhook";
 
   const handleSaveConfig = async () => {
     if (!accessToken || !phoneId || !wabaId) {
@@ -78,95 +82,103 @@ export default function ConfigModal({ isOpen, onClose, onSuccess }: ConfigModalP
     setLoading(false);
   };
 
-  const copyToClipboard = (text: string) => {
+  // बिना Alert वाला स्मार्ट कॉपी फंक्शन
+  const handleCopy = (text: string, field: string) => {
     navigator.clipboard.writeText(text);
-    alert("Copied to clipboard!");
+    setCopiedField(field);
+    setTimeout(() => setCopiedField(null), 2000); // 2 सेकंड बाद वापस Copy आइकॉन आ जाएगा
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 transition-opacity duration-300">
+      <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden flex flex-col transform transition-all scale-100">
         
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-gray-50">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center text-green-600">
-              <Link2 className="w-5 h-5" />
+        <div className="flex items-center justify-between p-6 border-b border-gray-100 bg-white">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-green-50 rounded-2xl flex items-center justify-center text-[#25D366] border border-green-100 shadow-sm">
+              <Link2 className="w-6 h-6" />
             </div>
             <div>
               <h2 className="text-xl font-bold text-gray-800">Link Meta API</h2>
-              <p className="text-xs text-gray-500">Configure your WhatsApp Business Account</p>
+              <p className="text-sm text-gray-500 font-medium">Configure your WhatsApp Business Account</p>
             </div>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 transition">
-            <X className="w-6 h-6" />
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 bg-gray-50 hover:bg-gray-100 p-2 rounded-full transition-colors">
+            <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Body - Input Fields */}
-        <div className="p-6 space-y-4 overflow-y-auto max-h-[60vh]">
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-gray-600 flex items-center gap-1">
-              <Key className="w-3 h-3" /> Permanent Access Token
+        <div className="p-6 space-y-5 overflow-y-auto max-h-[65vh] bg-gray-50/50">
+          <div className="space-y-1.5">
+            <label className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
+              <Key className="w-4 h-4 text-gray-500" /> Permanent Access Token
             </label>
             <input 
               type="password" 
               value={accessToken}
               onChange={(e) => setAccessToken(e.target.value)}
               placeholder="EAAGm0P..." 
-              className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 text-sm"
+              className="w-full bg-white border border-gray-200 text-gray-900 rounded-xl px-4 py-3 outline-none focus:ring-4 focus:ring-green-500/10 focus:border-green-500 text-sm font-medium transition-all shadow-sm"
             />
           </div>
 
           <div className="flex gap-4">
-            <div className="space-y-1 flex-1">
-              <label className="text-xs font-semibold text-gray-600 flex items-center gap-1">
-                <Phone className="w-3 h-3" /> Phone Number ID
+            <div className="space-y-1.5 flex-1">
+              <label className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
+                <Phone className="w-4 h-4 text-gray-500" /> Phone Number ID
               </label>
               <input 
                 type="text" 
                 value={phoneId}
                 onChange={(e) => setPhoneId(e.target.value)}
                 placeholder="103456789..." 
-                className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 text-sm"
+                className="w-full bg-white border border-gray-200 text-gray-900 rounded-xl px-4 py-3 outline-none focus:ring-4 focus:ring-green-500/10 focus:border-green-500 text-sm font-medium transition-all shadow-sm"
               />
             </div>
-            <div className="space-y-1 flex-1">
-              <label className="text-xs font-semibold text-gray-600">WABA ID</label>
+            <div className="space-y-1.5 flex-1">
+              <label className="text-sm font-semibold text-gray-700">WABA ID</label>
               <input 
                 type="text" 
                 value={wabaId}
                 onChange={(e) => setWabaId(e.target.value)}
                 placeholder="105678901..." 
-                className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 text-sm"
+                className="w-full bg-white border border-gray-200 text-gray-900 rounded-xl px-4 py-3 outline-none focus:ring-4 focus:ring-green-500/10 focus:border-green-500 text-sm font-medium transition-all shadow-sm"
               />
             </div>
           </div>
 
-          <div className="my-4 border-t border-gray-200 pt-4">
-            <div className="flex items-start gap-2 mb-3 bg-blue-50 p-3 rounded-lg border border-blue-100">
+          <div className="mt-6 pt-5 border-t border-gray-200 space-y-4">
+            <div className="flex items-start gap-3 bg-blue-50/80 p-4 rounded-2xl border border-blue-100">
               <ShieldAlert className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
-              <p className="text-xs text-blue-700">
-                Put these details in your Meta Developer Dashboard -&gt; Webhooks section to verify your app.
+              <p className="text-sm text-blue-800 leading-relaxed font-medium">
+                Put these details in your Meta Developer Dashboard <strong>Webhooks</strong> section to verify your app.
               </p>
             </div>
             
-            <div className="space-y-1 mb-3">
-              <label className="text-xs font-semibold text-gray-600">Your Webhook Callback URL</label>
-              <div className="flex bg-gray-50 border border-gray-200 rounded-xl overflow-hidden">
-                <input type="text" readOnly value={webhookUrl} className="flex-1 bg-transparent px-4 py-2 text-sm outline-none text-gray-600" />
-                <button onClick={() => copyToClipboard(webhookUrl)} className="bg-gray-200 px-4 hover:bg-gray-300 transition flex items-center justify-center text-gray-700">
-                  <Copy className="w-4 h-4" />
+            <div className="space-y-1.5">
+              <label className="text-sm font-semibold text-gray-700">Your Webhook Callback URL</label>
+              <div className="flex bg-white border border-gray-200 rounded-xl overflow-hidden focus-within:ring-4 focus-within:ring-gray-100 focus-within:border-gray-300 transition-all shadow-sm group">
+                <input type="text" readOnly value={webhookUrl} className="flex-1 bg-transparent px-4 py-3 text-sm outline-none text-gray-600 font-medium" />
+                <button 
+                  onClick={() => handleCopy(webhookUrl, 'url')} 
+                  className="px-5 border-l border-gray-200 bg-gray-50 hover:bg-gray-100 transition-colors flex items-center justify-center text-gray-600 group-hover:text-gray-900"
+                >
+                  {copiedField === 'url' ? <Check className="w-5 h-5 text-green-500" /> : <Copy className="w-4 h-4" />}
                 </button>
               </div>
             </div>
 
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-gray-600">Auto-Generated Verify Token</label>
-              <div className="flex bg-gray-50 border border-gray-200 rounded-xl overflow-hidden">
-                <input type="text" readOnly value={verifyToken} className="flex-1 bg-transparent px-4 py-2 text-sm outline-none text-green-600 font-mono" />
-                <button onClick={() => copyToClipboard(verifyToken)} className="bg-gray-200 px-4 hover:bg-gray-300 transition flex items-center justify-center text-gray-700">
-                  <Copy className="w-4 h-4" />
+            <div className="space-y-1.5">
+              <label className="text-sm font-semibold text-gray-700">Auto-Generated Verify Token</label>
+              <div className="flex bg-white border border-gray-200 rounded-xl overflow-hidden focus-within:ring-4 focus-within:ring-green-500/10 focus-within:border-green-300 transition-all shadow-sm group">
+                <input type="text" readOnly value={verifyToken} className="flex-1 bg-transparent px-4 py-3 text-sm outline-none text-[#25D366] font-bold font-mono tracking-wide" />
+                <button 
+                  onClick={() => handleCopy(verifyToken, 'token')} 
+                  className="px-5 border-l border-gray-200 bg-gray-50 hover:bg-gray-100 transition-colors flex items-center justify-center text-gray-600 group-hover:text-gray-900"
+                >
+                  {copiedField === 'token' ? <Check className="w-5 h-5 text-green-500" /> : <Copy className="w-4 h-4" />}
                 </button>
               </div>
             </div>
@@ -174,14 +186,21 @@ export default function ConfigModal({ isOpen, onClose, onSuccess }: ConfigModalP
         </div>
 
         {/* Footer */}
-        <div className="p-6 border-t border-gray-200 bg-gray-50 flex justify-end gap-3">
-          <button onClick={onClose} className="px-5 py-2.5 rounded-xl font-medium text-gray-600 hover:bg-gray-200 transition">Cancel</button>
+        <div className="p-6 border-t border-gray-100 bg-white flex justify-end gap-3 rounded-b-3xl">
+          <button onClick={onClose} className="px-6 py-3 rounded-xl font-semibold text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-all">Cancel</button>
           <button 
             onClick={handleSaveConfig}
             disabled={loading}
-            className="flex items-center gap-2 bg-[#25D366] text-white px-6 py-2.5 rounded-xl font-semibold hover:bg-[#20b858] transition shadow-md disabled:opacity-50"
+            className="flex items-center gap-2 bg-[#25D366] text-white px-7 py-3 rounded-xl font-bold hover:bg-[#20b858] hover:shadow-lg hover:shadow-green-500/20 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? "Saving..." : <><CheckCircle2 className="w-5 h-5" /> Save & Link</>}
+            {loading ? (
+              <span className="flex items-center gap-2">
+                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span> 
+                Saving...
+              </span>
+            ) : (
+              <><CheckCircle2 className="w-5 h-5" /> Save & Link</>
+            )}
           </button>
         </div>
       </div>
