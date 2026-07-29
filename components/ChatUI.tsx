@@ -4,6 +4,9 @@ import React, { useState, useRef, useEffect } from "react";
 import { ArrowLeft, MoreVertical, Trash2, X, Phone, Video as VideoIcon } from "lucide-react";
 import ChatBubble from "./ChatBubble";
 import ChatInput from "./ChatInput";
+import { auth, database } from "../lib/firebase"; 
+import { onAuthStateChanged } from "firebase/auth";
+import { ref, get } from "firebase/database";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface Message {
@@ -36,6 +39,32 @@ export default function ChatUI() {
 
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
+  // ─── API Credentials & State ───
+  const [phoneId, setPhoneId] = useState<string | null>(null);
+  const [accessToken, setAccessToken] = useState<string | null>(null);
+  
+  // Demo recipient phone (jispe WhatsApp message jayega)
+  const recipientPhone = "919229966001";
+
+  // Fetch Firebase Credentials
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        try {
+          const configRef = ref(database, `users/${user.uid}/config`);
+          const snapshot = await get(configRef);
+          if (snapshot.exists() && snapshot.val().phoneId) {
+            setPhoneId(snapshot.val().phoneId);
+            setAccessToken(snapshot.val().accessToken);
+          }
+        } catch (err) {
+          console.error("Error fetching Meta API config:", err);
+        }
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
   // Auto-scroll to bottom when new message arrives
   useEffect(() => {
     if (chatContainerRef.current) {
@@ -43,36 +72,122 @@ export default function ChatUI() {
     }
   }, [messages]);
 
-  // ─── Actions ───────────────────────────────────────────────────────────────
+  // ─── META API SEND FUNCTION ───
+  const sendToMeta = async (payload: any) => {
+    if (!phoneId || !accessToken) {
+      alert("Error: Settings me Meta API connect karein. Credentials missing hain.");
+      return;
+    }
+    try {
+      const res = await fetch(`https://graph.facebook.com/v21.0/${phoneId}/messages`, {
+        method: "POST",
+        headers: { 
+          "Authorization": `Bearer ${accessToken}`, 
+          "Content-Type": "application/json" 
+        },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error.message);
+      return data;
+    } catch (err: any) {
+      console.error("Meta API Error:", err);
+      alert("Failed to send message: " + err.message);
+    }
+  };
+
+  // ─── Actions (Text, Location, Template) ────────────────────────────────────
   
-  // 1. Send Message
-  const handleSend = () => {
+  // 1. Send Normal Text Message
+  const handleSendText = async () => {
     if (!inputText.trim()) return;
     setIsSending(true);
+    const textToSend = inputText.trim();
 
+    // UI me turant message dikhane ke liye
     const newMsg: Message = {
       id: Date.now().toString(),
-      text: inputText.trim(),
+      text: textToSend,
       sender: "me",
       time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       status: "sent",
       replyTo: replyingTo ? replyingTo.text : null,
     };
 
-    setTimeout(() => {
-      setMessages((prev) => [...prev, newMsg]);
-      setInputText("");
-      setReplyingTo(null);
-      setIsSending(false);
-    }, 400); // Thoda realistic delay
+    setMessages((prev) => [...prev, newMsg]);
+    setInputText("");
+    setReplyingTo(null);
+
+    // Meta API ko payload bhejna
+    const payload = {
+      messaging_product: "whatsapp",
+      to: recipientPhone,
+      type: "text",
+      text: { body: textToSend }
+    };
+
+    await sendToMeta(payload);
+    setIsSending(false);
   };
 
-  // 2. Single Delete (Passed to ChatBubble)
+  // 2. Send Location
+  const handleSendLocation = async (lat: number, lng: number) => {
+    // UI Update
+    const newMsg: Message = { 
+      id: Date.now().toString(), 
+      text: `📍 Location Shared\nhttps://maps.google.com/?q=${lat},${lng}`, 
+      sender: "me", 
+      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }), 
+      status: "sent" 
+    };
+    setMessages((prev) => [...prev, newMsg]);
+
+    // API Payload
+    const payload = {
+      messaging_product: "whatsapp",
+      to: recipientPhone,
+      type: "location",
+      location: { 
+        latitude: lat, 
+        longitude: lng, 
+        name: "Current Location", 
+        address: "Shared via BaseKey" 
+      }
+    };
+    await sendToMeta(payload);
+  };
+
+  // 3. Send Template
+  const handleSendTemplate = async (template: any) => {
+    // UI Update
+    const newMsg: Message = { 
+      id: Date.now().toString(), 
+      text: `📄 Template Sent: ${template.name}`, 
+      sender: "me", 
+      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }), 
+      status: "sent" 
+    };
+    setMessages((prev) => [...prev, newMsg]);
+
+    // API Payload
+    const payload = {
+      messaging_product: "whatsapp",
+      to: recipientPhone,
+      type: "template",
+      template: { 
+        name: template.name, 
+        language: { code: template.language } 
+      }
+    };
+    await sendToMeta(payload);
+  };
+
+  // ─── UI Actions ────────────────────────────────────────────────────────────
+
   const handleDeleteSingle = (id: string) => {
     setMessages((prev) => prev.filter((msg) => msg.id !== id));
   };
 
-  // 3. Clear All (Header Menu)
   const handleClearAll = () => {
     if (window.confirm("Are you sure you want to clear this entire chat?")) {
       setMessages([]);
@@ -80,7 +195,6 @@ export default function ChatUI() {
     }
   };
 
-  // 4. Bulk Delete (When multiple messages are selected)
   const handleBulkDelete = () => {
     if (window.confirm(`Delete ${selectedIds.length} selected messages?`)) {
       setMessages((prev) => prev.filter((msg) => !selectedIds.includes(msg.id)));
@@ -101,7 +215,6 @@ export default function ChatUI() {
       {/* ─── Header ─── */}
       <header className="bg-[#008069] text-white px-4 py-2.5 flex items-center justify-between z-20 shadow-md">
         {isSelectionMode ? (
-          // Selection Mode Header
           <div className="flex items-center justify-between w-full">
             <div className="flex items-center gap-4">
               <button onClick={() => setSelectedIds([])} className="p-1 hover:bg-white/20 rounded-full transition">
@@ -114,7 +227,6 @@ export default function ChatUI() {
             </button>
           </div>
         ) : (
-          // Normal Header
           <>
             <div className="flex items-center gap-3">
               <button className="sm:hidden p-1 -ml-1 hover:bg-white/20 rounded-full transition">
@@ -133,7 +245,6 @@ export default function ChatUI() {
               <button className="p-2 hover:bg-white/20 rounded-full transition hidden sm:block"><VideoIcon className="w-5 h-5" /></button>
               <button className="p-2 hover:bg-white/20 rounded-full transition hidden sm:block"><Phone className="w-5 h-5" /></button>
               
-              {/* 3-Dots Menu */}
               <div className="relative">
                 <button onClick={() => setShowMenu(!showMenu)} className="p-2 hover:bg-white/20 rounded-full transition">
                   <MoreVertical className="w-5 h-5" />
@@ -157,22 +268,20 @@ export default function ChatUI() {
       {/* ─── Chat Area (WhatsApp Doodle Background) ─── */}
       <div 
         ref={chatContainerRef}
-        className="flex-1 overflow-y-auto px-2 sm:px-4 pt-4 pb-[100px]" // 🔥 pb-[100px] add kiya taaki aakhiri message InpuBox ke piche na chhupe
+        className="flex-1 overflow-y-auto px-2 sm:px-4 pt-4 pb-[90px]" // 🔥 Yahan padding fix ki gayi hai
         style={{
           backgroundImage: `url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png')`,
           backgroundSize: "400px",
           backgroundRepeat: "repeat",
-          backgroundColor: "#efeae2" // Default WA web background color
+          backgroundColor: "#efeae2" 
         }}
       >
-        {/* Date Badge */}
         <div className="flex justify-center mb-6">
           <span className="bg-white/90 text-gray-500 text-[12px] px-3 py-1 rounded-lg shadow-sm font-medium">
             TODAY
           </span>
         </div>
 
-        {/* Messages List */}
         {messages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <span className="bg-[#FFF3C7] text-gray-600 text-[12px] px-4 py-2 rounded-xl shadow-sm text-center max-w-sm">
@@ -187,7 +296,7 @@ export default function ChatUI() {
               selectionMode={isSelectionMode}
               isSelected={selectedIds.includes(msg.id)}
               onToggleSelect={toggleSelect}
-              onDelete={handleDeleteSingle} // Single delete function passed here
+              onDelete={handleDeleteSingle} 
               onReply={(m) => setReplyingTo({ text: m.text, sender: m.sender, id: m.id })}
               contactName="BaseKey Support"
             />
@@ -199,22 +308,16 @@ export default function ChatUI() {
       <ChatInput
         inputText={inputText}
         setInputText={setInputText}
-        onSend={handleSend}
+        onSend={handleSendText} // API Function
         isSending={isSending}
         replyingTo={replyingTo}
         onCancelReply={() => setReplyingTo(null)}
         activeContactName="BaseKey Support"
         
-        // Dummy functions for media/location/interactive buttons
-        onSendMedia={async (file, type) => console.log("Media sent:", type)}
-        onSendLocation={(lat, lng) => console.log("Location sent:", lat, lng)}
+        onSendMedia={async (file, type) => console.log("Media Upload API pending...")}
+        onSendLocation={handleSendLocation} // API Function Jod Diya
         onSendInteractive={(type) => console.log("Interactive sent:", type)}
-        
-        // 🔥 Template receive karne ka naya function
-        onSendTemplate={(template) => {
-          console.log("Template Received from Picker:", template);
-          alert(`Template '${template.name}' selected! (Iska aage ka logic abhi jorna baaki hai)`);
-        }}
+        onSendTemplate={handleSendTemplate} // API Function Jod Diya
       />
     </div>
   );
