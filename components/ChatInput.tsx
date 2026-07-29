@@ -4,8 +4,7 @@ import React, { useRef, useState, useEffect, useCallback } from "react";
 import {
   Send, Loader2, Plus, Image as ImageIcon, Video, FileText,
   MapPin, X, Camera, Mic, IndianRupee, MessageSquare,
-  Link2, LayoutTemplate, Download, Eye, Pause, Play,
-  Smile, Check,
+  Link2, LayoutTemplate, Download, Eye, Pause, Play, Smile, Check
 } from "lucide-react";
 import EmojiPicker, { EmojiClickData, Theme } from "emoji-picker-react";
 import TemplatePicker from "./TemplatePicker"; 
@@ -215,7 +214,7 @@ function AudioRecorder({ onStop, onCancel }: AudioRecorderProps) {
 // ─── Main ChatInput ───────────────────────────────────────────────────────────
 
 export default function ChatInput({
-  inputText, setInputText, onSend, isSending, disabled = false, replyingTo, onCancelReply, activeContactName = "Contact", onSendMedia, onSendLocation, onSendInteractive, onSendTemplate, phoneId, accessToken
+  inputText, setInputText, onSend, isSending, disabled = false, replyingTo, onCancelReply, activeContactName = "Contact", onSendMedia, onSendLocation, onSendInteractive, onSendTemplate
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const multiImageInputRef = useRef<HTMLInputElement>(null);
@@ -273,15 +272,15 @@ export default function ChatInput({
 
   const handleCancelPendingMedias = () => { if (pendingMedias) pendingMedias.files.forEach((i) => URL.revokeObjectURL(i.url)); setPendingMedias(null); };
 
-  const handleAddMore = () => { multiImageInputRef.current?.click(); };
-
-  // 🔥 YAHAN LOCATION LOGIC KO EK DAM FIX KIYA GAYA HAI
+  // 🔥 EKDAM PERFECT LOCATION LOGIC
   const handleLocationClick = () => {
     if (!navigator.geolocation) {
-      alert("Location is not supported by your browser.");
+      alert("Aapka browser location support nahi karta.");
       return;
     }
+    
     setIsLocating(true);
+    
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         onSendLocation?.(pos.coords.latitude, pos.coords.longitude);
@@ -289,14 +288,15 @@ export default function ChatInput({
         setShowMediaMenu(false);
       },
       (err) => {
-        console.error("Location error:", err);
-        if (err.code === 1) alert("Permission Denied: Location permission allow karein.");
-        else if (err.code === 2) alert("Position Unavailable: Apna GPS/Location On karein.");
-        else alert("Time Out: Location fetch nahi ho payi.");
+        console.error("Location Error:", err);
+        if (err.code === 1) alert("Permission Denied: Kripya apne browser ki location permission allow karein.");
+        else if (err.code === 2) alert("Position Unavailable: Kripya apne phone ka GPS (Location) ON karein.");
+        else alert("Timeout: Location nahi mil payi. Thodi der baad try karein.");
+        
         setIsLocating(false);
         setShowMediaMenu(false);
       },
-      { timeout: 15000, enableHighAccuracy: true, maximumAge: 0 } // Taaki purani location na uthaye
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 } // Advanced options taki fail na ho
     );
   };
 
@@ -309,7 +309,7 @@ export default function ChatInput({
 
   const mediaOptions = [
     { icon: ImageIcon, label: "Photo", color: "text-blue-500", bg: "bg-blue-50", action: () => multiImageInputRef.current?.click() },
-    // 🔥 CAMERA SE CAPTURE="ENVIRONMENT" HATA DIYA HAI TAAKI SEEDHA CAMERA NA KHULE
+    // 🔥 CAMERA SE CAPTURE HATA DIYA HAIN
     { icon: Camera, label: "Camera", color: "text-pink-500", bg: "bg-pink-50", action: () => videoInputRef.current?.click() },
     { icon: FileText, label: "Document", color: "text-purple-500", bg: "bg-purple-50", action: () => docInputRef.current?.click() },
     { icon: isLocating ? Loader2 : MapPin, label: "Location", color: "text-green-500", bg: "bg-green-50", action: handleLocationClick, spin: isLocating },
@@ -318,23 +318,23 @@ export default function ChatInput({
   const interactiveOptions = [
     { icon: MessageSquare, label: "Quick Reply", color: "text-blue-600", bg: "bg-blue-50", action: () => { onSendInteractive?.("quick_reply"); setShowInteractiveMenu(false); } },
     { icon: Link2, label: "URL Button", color: "text-teal-600", bg: "bg-teal-50", action: () => { onSendInteractive?.("url"); setShowInteractiveMenu(false); } },
-    { icon: LayoutTemplate, label: "Template", color: "text-indigo-600", bg: "bg-indigo-50", action: () => { setShowTemplatePicker(true); setShowInteractiveMenu(false); } }, 
+    { icon: LayoutTemplate, label: "Template", color: "text-indigo-600", bg: "bg-indigo-50", action: () => { setShowTemplatePicker(true); setShowInteractiveMenu(false); } },
   ];
 
   const activeOptions = showMediaMenu ? mediaOptions : interactiveOptions;
 
   return (
-    // 🌟 INPUT BOX KO EKDAM NEECHE (bottom-0 pb-1) CHIPKA DIYA HAI
-    <div className="absolute bottom-0 w-full z-40 px-1 sm:px-4 pb-1 sm:pb-2 pointer-events-none flex justify-center">
+    // 🌟 EKDAM BOTTOM PAR CHIPKA HUA (bottom-0 pb-1)
+    <div className="absolute bottom-0 w-full z-40 px-1 sm:px-2 pb-1 pointer-events-none flex justify-center">
       
-      <div className="w-full max-w-4xl bg-white/95 backdrop-blur-xl border border-gray-200/80 shadow-[0_4px_25px_rgb(0,0,0,0.1)] rounded-[24px] pointer-events-auto p-1 flex flex-col transition-all duration-300 animate-in slide-in-from-bottom-5 fade-in">
+      <div className="w-full max-w-4xl bg-white/95 backdrop-blur-xl border border-gray-200/80 shadow-[0_4px_25px_rgb(0,0,0,0.1)] rounded-[24px] pointer-events-auto p-1 flex flex-col transition-all duration-300">
 
         <input type="file" ref={multiImageInputRef} accept="image/*,video/*" multiple className="hidden" onChange={(e) => handleFileChange(e, "image")} />
         <input type="file" ref={videoInputRef} accept="image/*,video/*" className="hidden" onChange={(e) => handleFileChange(e, "video")} />
         <input type="file" ref={docInputRef} accept=".pdf,.doc,.docx,.txt" className="hidden" onChange={(e) => handleFileChange(e, "document")} />
 
         {pendingMedias && (
-          <MultiMediaBubble previews={pendingMedias} isSending={isSendingMedia} onCancel={handleCancelPendingMedias} onSend={handleSendPendingMedias} onAddMore={handleAddMore} />
+          <MultiMediaBubble previews={pendingMedias} isSending={isSendingMedia} onCancel={handleCancelPendingMedias} onSend={handleSendPendingMedias} onAddMore={() => multiImageInputRef.current?.click()} />
         )}
 
         {replyingTo && !pendingMedias && (
@@ -350,23 +350,23 @@ export default function ChatInput({
           </div>
         )}
 
-        {/* 🔥 YAHAN SE PROPS HATAYE GAYE HAIN TAAKI YEH FIREBASE SE DIRECT ID LE SAKE */}
+        {/* TEMPLATE PICKER (Firebase based) */}
         {showTemplatePicker && (
           <TemplatePicker
             onClose={() => setShowTemplatePicker(false)}
             onSelect={(template) => {
-              onSendTemplate?.(template); 
+              onSendTemplate?.(template);
               setShowTemplatePicker(false);
             }}
           />
         )}
 
         {(showMediaMenu || showInteractiveMenu) && (
-          <div className="absolute bottom-full left-4 mb-3 bg-white/95 backdrop-blur-xl border border-gray-100 shadow-2xl rounded-2xl p-2 flex gap-1.5 z-50 animate-in slide-in-from-bottom-3 fade-in duration-200">
+          <div className="absolute bottom-full left-2 mb-2 bg-white/95 backdrop-blur-xl border border-gray-100 shadow-2xl rounded-2xl p-2 flex gap-1 z-50 animate-in slide-in-from-bottom-2 fade-in duration-200">
             {activeOptions.map((opt, i) => (
-              <button key={i} onClick={opt.action} className="flex flex-col items-center gap-1 p-2 w-[65px] rounded-xl hover:bg-gray-50 active:scale-95 transition">
+              <button key={i} onClick={opt.action} className="flex flex-col items-center gap-1 p-1.5 w-[60px] rounded-xl hover:bg-gray-50 active:scale-95 transition">
                 <div className={`w-10 h-10 rounded-full ${opt.bg} flex items-center justify-center shadow-sm`}>
-                  <opt.icon className={`w-[18px] h-[18px] ${opt.color} ${(opt as any).spin ? "animate-spin" : ""}`} />
+                  <opt.icon className={`w-5 h-5 ${opt.color} ${(opt as any).spin ? "animate-spin" : ""}`} />
                 </div>
                 <span className="text-[9px] font-bold text-gray-600 text-center leading-tight">{opt.label}</span>
               </button>
@@ -375,55 +375,48 @@ export default function ChatInput({
         )}
 
         {showEmojiPicker && (
-          <div ref={emojiPickerRef} className="absolute bottom-full left-4 mb-3 z-50 shadow-2xl rounded-3xl overflow-hidden animate-in slide-in-from-bottom-3 fade-in duration-200 border border-gray-100">
+          <div ref={emojiPickerRef} className="absolute bottom-full left-2 mb-2 z-50 shadow-2xl rounded-3xl overflow-hidden border border-gray-100">
             <EmojiPicker onEmojiClick={handleEmojiClick} theme={Theme.LIGHT} lazyLoadEmojis height={350} width={300} />
           </div>
         )}
 
-        <div className="flex items-end gap-1.5 px-1 py-0.5">
+        <div className="flex items-end gap-1 px-1 py-0.5">
+          <button onClick={toggleMediaMenu} className="w-9 h-9 shrink-0 rounded-full flex items-center justify-center text-gray-500 hover:bg-gray-100 transition mb-0.5">
+            <Plus className={`w-5 h-5 transition-transform duration-300 ${showMediaMenu ? "rotate-45 text-[#00A884]" : ""}`} />
+          </button>
 
-          {isRecording ? (
-            <div className="flex-1 w-full"><AudioRecorder onStop={handleAudioStop} onCancel={() => setIsRecording(false)} /></div>
-          ) : (
-            <>
-              <button onClick={toggleMediaMenu} className="w-9 h-9 shrink-0 rounded-full flex items-center justify-center text-gray-500 hover:bg-gray-100 transition">
-                <Plus className={`w-5 h-5 transition-transform duration-300 ${showMediaMenu ? "rotate-45 text-[#00A884]" : ""}`} />
+          <div className="flex-1 bg-gray-100/70 border border-transparent focus-within:border-gray-200 focus-within:bg-white rounded-[20px] flex items-end px-2 py-1 transition-all mb-0.5">
+            <button onMouseDown={(e) => { e.preventDefault(); setShowEmojiPicker((p) => !p); setShowMediaMenu(false); setShowInteractiveMenu(false); setShowTemplatePicker(false); }} className={`w-7 h-7 mb-0.5 shrink-0 transition rounded-full flex items-center justify-center ${showEmojiPicker ? "text-[#00A884]" : "text-gray-400 hover:text-[#00A884]"}`}>
+              <Smile className="w-[18px] h-[18px]" />
+            </button>
+            <textarea
+              ref={textareaRef}
+              value={inputText}
+              onChange={handleTextChange}
+              onKeyDown={handleKeyDown}
+              placeholder="Message..."
+              className="w-full max-h-[80px] bg-transparent resize-none overflow-y-auto text-[14px] text-gray-800 outline-none placeholder-gray-400 py-1 px-1.5 font-medium leading-snug"
+              rows={1}
+              disabled={disabled || isSending || !!pendingMedias}
+            />
+          </div>
+
+          <div className="flex items-center gap-0.5 shrink-0 mb-0.5">
+            {inputText.trim() ? (
+              <button onClick={onSend} disabled={isSending || disabled} className="w-9 h-9 bg-[#00A884] text-white rounded-full flex items-center justify-center transition hover:scale-105 active:scale-95 shadow-md">
+                {isSending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4 ml-0.5" />}
               </button>
-
-              <div className="flex-1 bg-gray-100/60 border border-transparent focus-within:border-gray-200 focus-within:bg-white rounded-[20px] flex items-end px-2 py-0.5 transition-all">
-                <button onMouseDown={(e) => { e.preventDefault(); setShowEmojiPicker((p) => !p); setShowMediaMenu(false); setShowInteractiveMenu(false); setShowTemplatePicker(false); }} className={`w-7 h-7 mb-0.5 shrink-0 transition rounded-full flex items-center justify-center ${showEmojiPicker ? "text-[#00A884]" : "text-gray-400 hover:text-[#00A884]"}`}>
-                  <Smile className="w-[18px] h-[18px]" />
+            ) : (
+              <>
+                <button onClick={toggleInteractiveMenu} className={`w-9 h-9 rounded-full flex items-center justify-center transition ${showInteractiveMenu ? "bg-[#00A884]/10 text-[#00A884]" : "text-gray-500 hover:bg-gray-100"}`}>
+                  <IndianRupee className="w-[18px] h-[18px]" />
                 </button>
-                <textarea
-                  ref={textareaRef}
-                  value={inputText}
-                  onChange={handleTextChange}
-                  onKeyDown={handleKeyDown}
-                  placeholder="Message..."
-                  className="w-full max-h-[80px] bg-transparent resize-none overflow-y-auto text-[14px] text-gray-800 outline-none placeholder-gray-400 py-1 px-1.5 font-medium"
-                  rows={1}
-                  disabled={disabled || isSending || !!pendingMedias}
-                />
-              </div>
-
-              <div className="flex items-center gap-0.5 shrink-0 pb-0.5">
-                {inputText.trim() ? (
-                  <button onClick={onSend} disabled={isSending || disabled} className="w-9 h-9 bg-[#00A884] text-white rounded-full flex items-center justify-center transition hover:scale-105 active:scale-95 shadow-md disabled:opacity-50 hover:bg-[#008f6f]">
-                    {isSending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4 ml-0.5" />}
-                  </button>
-                ) : (
-                  <>
-                    <button onClick={toggleInteractiveMenu} className={`w-9 h-9 rounded-full flex items-center justify-center transition ${showInteractiveMenu ? "bg-[#00A884]/10 text-[#00A884]" : "text-gray-500 hover:bg-gray-100"}`} title="Templates & Interactive">
-                      <IndianRupee className="w-4 h-4" />
-                    </button>
-                    <button onClick={() => setIsRecording(true)} className="w-9 h-9 rounded-full flex items-center justify-center text-gray-500 hover:bg-gray-100 transition">
-                      <Mic className="w-4 h-4" />
-                    </button>
-                  </>
-                )}
-              </div>
-            </>
-          )}
+                <button onClick={() => setIsRecording(true)} className="w-9 h-9 rounded-full flex items-center justify-center text-gray-500 hover:bg-gray-100 transition">
+                  <Mic className="w-[18px] h-[18px]" />
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </div>
     </div>
