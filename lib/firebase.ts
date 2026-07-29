@@ -32,15 +32,3 @@ const githubProvider = new GithubAuthProvider();
 const twitterProvider = new TwitterAuthProvider(); 
 
 // Naya LinkedIn Provider (Custom OAuth / OIDC Provider)
-const linkedInProvider = new OAuthProvider('oidc.linkedin');
-
-export { 
-  app, 
-  database, 
-  auth, 
-  googleProvider, 
-  facebookProvider, 
-  githubProvider, 
-  twitterProvider,
-  linkedInProvider // Export mein add kiya
-};
