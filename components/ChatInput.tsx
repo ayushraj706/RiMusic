@@ -671,7 +671,7 @@ export default function ChatInput({
                 className="flex flex-col items-center gap-1.5 p-2 w-[72px] rounded-xl hover:bg-gray-50 active:scale-95 transition"
               >
                 <div className={`w-12 h-12 rounded-full ${opt.bg} flex items-center justify-center shadow-sm`}>
-                  <opt.icon className={`w-5 h-5 ${opt.color} ${opt.spin ? "animate-spin" : ""}`} />
+                  <opt.icon className={`w-5 h-5 ${opt.color} ${(opt as any).spin ? "animate-spin" : ""}`} />
                 </div>
                 <span className="text-[10px] font-bold text-gray-600 text-center leading-tight">
                   {opt.label}
