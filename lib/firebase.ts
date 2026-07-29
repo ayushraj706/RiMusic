@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getDatabase } from "firebase/database"; 
-import { getAuth, GoogleAuthProvider } from "firebase/auth"; // Auth ke liye import add kiya
+import { getAuth, GoogleAuthProvider, FacebookAuthProvider } from "firebase/auth"; // FacebookAuthProvider add kiya
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -17,8 +17,9 @@ const firebaseConfig = {
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const database = getDatabase(app);
 
-// Google Login ke liye Auth aur Provider initialize kiya
+// Google aur Facebook Login ke liye Auth aur Providers initialize kiya
 const auth = getAuth(app);
 const googleProvider = new GoogleAuthProvider();
+const facebookProvider = new FacebookAuthProvider(); // Naya Facebook Provider
 
-export { app, database, auth, googleProvider };
+export { app, database, auth, googleProvider, facebookProvider }; // Export mein add kiya
