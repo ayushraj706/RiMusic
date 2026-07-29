@@ -13,8 +13,7 @@ import {
   googleProvider, 
   facebookProvider, 
   githubProvider, 
-  twitterProvider, 
-  linkedInProvider // Naya LinkedIn Provider add kiya hai
+  twitterProvider 
 } from "../../lib/firebase"; 
 import { 
   KeyRound, 
@@ -96,16 +95,6 @@ export default function LoginPage() {
     }
   };
 
-  // Naya LinkedIn Login Handler (Bina koi purana code mitaye)
-  const handleLinkedInLogin = async () => {
-    try { 
-      const res = await signInWithPopup(auth, linkedInProvider); 
-      if (res.user) window.location.href = "/"; 
-    } catch (error: any) { 
-      alert("LinkedIn Error: " + error.message); 
-    }
-  };
-
   if (!isMounted) return null; 
 
   const itemVariants = {
@@ -125,14 +114,13 @@ export default function LoginPage() {
             exit={{ opacity: 0, transition: { duration: 0.5, ease: "easeInOut" } }}
           >
             <AnimatePresence mode="wait">
-              {/* PHASE 0: WATSAPP JASA ICON CLUSTER (Bina Phone ke) */}
+              {/* PHASE 0: WATSAPP JASA ICON CLUSTER */}
               {phase === 0 && (
                 <motion.div
                   key="cluster"
                   className="relative w-48 h-48 flex items-center justify-center"
                   exit={{ scale: 0, opacity: 0, transition: { duration: 0.4, ease: "backIn" } }}
                 >
-                  {/* Globe Icon */}
                   <motion.div
                     className="absolute top-2 right-2 text-[#25D366]"
                     initial={{ y: -15, opacity: 0 }}
@@ -142,7 +130,6 @@ export default function LoginPage() {
                     <Globe size={52} strokeWidth={1.5} />
                   </motion.div>
 
-                  {/* Lock Icon */}
                   <motion.div
                     className="absolute bottom-4 right-4 text-[#25D366] bg-[#FAFAFA] rounded-full p-1 z-20"
                     initial={{ x: 15, opacity: 0 }}
@@ -152,7 +139,6 @@ export default function LoginPage() {
                     <Lock size={36} fill="currentColor" strokeWidth={1} />
                   </motion.div>
 
-                  {/* Chhota Chat Bubble */}
                   <motion.div
                     className="absolute bottom-6 left-2 text-[#25D366] z-0"
                     initial={{ x: -15, opacity: 0 }}
@@ -162,7 +148,6 @@ export default function LoginPage() {
                     <MessageCircle size={44} fill="currentColor" strokeWidth={1} />
                   </motion.div>
 
-                  {/* Main Center Message Icon */}
                   <motion.div
                     className="z-10 bg-white rounded-[1.5rem] p-4 shadow-xl text-[#25D366] border border-gray-100"
                     initial={{ scale: 0 }}
@@ -178,7 +163,7 @@ export default function LoginPage() {
               {phase === 1 && (
                 <motion.img
                   key="main-logo"
-                  layoutId="basekey-logo" // <-- MAGIC ID
+                  layoutId="basekey-logo" 
                   src="/logo.svg" 
                   alt="BaseKey Logo"
                   className="w-28 h-28 drop-shadow-xl"
@@ -189,7 +174,6 @@ export default function LoginPage() {
               )}
             </AnimatePresence>
             
-            {/* "from BaseKey" text */}
             <motion.div
               className="absolute bottom-12 flex flex-col items-center gap-1"
             >
@@ -210,14 +194,13 @@ export default function LoginPage() {
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.6, ease: "easeOut" }}
           >
-            {/* Yahan aapka logo splash screen se udkar smoothly set ho jayega */}
             <motion.div 
               className="w-20 h-20 mx-auto mb-6 flex items-center justify-center"
               animate={{ y: [0, -6, 0] }} 
               transition={{ repeat: Infinity, duration: 4, ease: "easeInOut" }}
             >
               <motion.img
-                layoutId="basekey-logo" // <-- SAME MAGIC ID
+                layoutId="basekey-logo" 
                 src="/logo.svg" 
                 alt="BaseKey Logo"
                 className="w-16 h-16 drop-shadow-md"
@@ -245,7 +228,6 @@ export default function LoginPage() {
               transition={{ staggerChildren: 0.1, delayChildren: 0.4 }}
             >
               
-              {/* Google Button */}
               <motion.button 
                 variants={itemVariants} 
                 whileHover={{ scale: 1.02 }} 
@@ -262,7 +244,6 @@ export default function LoginPage() {
                 <span className="font-medium text-[14px]">Continue with Google</span>
               </motion.button>
 
-              {/* Facebook Button */}
               <motion.button 
                 variants={itemVariants} 
                 whileHover={{ scale: 1.02 }} 
@@ -276,21 +257,6 @@ export default function LoginPage() {
                 <span className="font-medium text-[14px]">Continue with Facebook</span>
               </motion.button>
 
-              {/* NEW: LinkedIn Button */}
-              <motion.button 
-                variants={itemVariants} 
-                whileHover={{ scale: 1.02 }} 
-                whileTap={{ scale: 0.98 }} 
-                onClick={handleLinkedInLogin} 
-                className="w-full flex items-center justify-center gap-3 bg-[#0A66C2] text-white py-3 px-6 rounded-xl hover:bg-[#004182] transition-colors shadow-sm border border-[#0A66C2]"
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
-                </svg>
-                <span className="font-medium text-[14px]">Continue with LinkedIn</span>
-              </motion.button>
-
-              {/* GitHub Button */}
               <motion.button 
                 variants={itemVariants} 
                 whileHover={{ scale: 1.02 }} 
@@ -304,7 +270,6 @@ export default function LoginPage() {
                 <span className="font-medium text-[14px]">Continue with GitHub</span>
               </motion.button>
 
-              {/* Twitter (X) Button */}
               <motion.button 
                 variants={itemVariants} 
                 whileHover={{ scale: 1.02 }} 
