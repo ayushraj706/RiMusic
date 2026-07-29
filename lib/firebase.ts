@@ -5,8 +5,7 @@ import {
   GoogleAuthProvider, 
   FacebookAuthProvider, 
   GithubAuthProvider, 
-  TwitterAuthProvider,
-  OAuthProvider // Naya import LinkedIn (OIDC) ke liye
+  TwitterAuthProvider 
 } from "firebase/auth"; 
 
 const firebaseConfig = {
@@ -31,4 +30,13 @@ const facebookProvider = new FacebookAuthProvider();
 const githubProvider = new GithubAuthProvider(); 
 const twitterProvider = new TwitterAuthProvider(); 
 
-// Naya LinkedIn Provider (Custom OAuth / OIDC Provider)
+// 👇 YAHI WO EXPORT HAI JISKI WAJAH SE VERCEL PAR ERROR AAYA THA
+export { 
+  app, 
+  database, 
+  auth, 
+  googleProvider, 
+  facebookProvider, 
+  githubProvider, 
+  twitterProvider 
+};
