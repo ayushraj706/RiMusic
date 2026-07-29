@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useRef, useState } from "react";
-import { Check, CheckCheck, Reply } from "lucide-react";
+import { Check, CheckCheck, Reply, Trash2 } from "lucide-react"; // Trash2 icon add kiya hai
 
 interface Message {
   id: string;
@@ -18,6 +18,7 @@ interface ChatBubbleProps {
   isSelected: boolean;
   onToggleSelect: (id: string) => void;
   onReply: (msg: Message) => void;
+  onDelete?: (id: string) => void; // Delete ka naya function prop
   contactName?: string;
 }
 
@@ -27,6 +28,7 @@ export default function ChatBubble({
   isSelected,
   onToggleSelect,
   onReply,
+  onDelete, // Ise destructure kiya
   contactName = "Contact",
 }: ChatBubbleProps) {
   const [translateX, setTranslateX] = useState(0);
@@ -69,7 +71,6 @@ export default function ChatBubble({
     else setShowActions(!showActions);
   };
 
-  // WhatsApp-style time formatting
   const formatTime = (timeStr: string) => {
     if (!timeStr) return "";
     return timeStr;
@@ -147,7 +148,7 @@ export default function ChatBubble({
             {msg.text}
           </p>
 
-          {/* Time & Status - Absolute positioned bottom-right */}
+          {/* Time & Status */}
           <div className="absolute bottom-1 right-2 flex items-center gap-1">
             <span className="text-[10.5px] text-[#667781] font-medium">
               {formatTime(msg.time)}
@@ -174,7 +175,7 @@ export default function ChatBubble({
         {/* Action Menu (on click) */}
         {showActions && !selectionMode && (
           <div
-            className="mt-1 bg-white rounded-lg shadow-lg border border-gray-100 py-1 px-1 z-30 animate-in fade-in zoom-in-95 duration-150"
+            className="mt-1 bg-white rounded-lg shadow-lg border border-gray-100 py-1.5 px-1.5 z-30 animate-in fade-in zoom-in-95 duration-150 flex flex-col min-w-[130px]"
             onClick={(e) => e.stopPropagation()}
           >
             <button
@@ -182,19 +183,34 @@ export default function ChatBubble({
                 onReply(msg);
                 setShowActions(false);
               }}
-              className="flex items-center gap-2 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 rounded-md w-full text-left transition"
+              className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-100 rounded-md w-full text-left transition"
             >
-              <Reply className="w-3.5 h-3.5" /> Reply
+              <Reply className="w-4 h-4" /> Reply
             </button>
             <button
               onClick={() => {
                 onToggleSelect(msg.id);
                 setShowActions(false);
               }}
-              className="flex items-center gap-2 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 rounded-md w-full text-left transition"
+              className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-100 rounded-md w-full text-left transition"
             >
-              <Check className="w-3.5 h-3.5" /> Select
+              <Check className="w-4 h-4" /> Select
             </button>
+            
+            {/* नया Delete बटन */}
+            {onDelete && (
+              <button
+                onClick={() => {
+                  if (window.confirm("Delete this message for everyone?")) {
+                    onDelete(msg.id);
+                  }
+                  setShowActions(false);
+                }}
+                className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50 rounded-md w-full text-left transition mt-0.5 border-t border-gray-100"
+              >
+                <Trash2 className="w-4 h-4" /> Delete
+              </button>
+            )}
           </div>
         )}
       </div>
