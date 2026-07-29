@@ -120,15 +120,14 @@ export default function ConfigModal({ isOpen, onClose, onSuccess }: ConfigModalP
     window.FB.login((response: any) => {
       if (response.authResponse) {
         const token = response.authResponse.accessToken;
-        console.log('Embedded Login Success! Token:', token);
-        // TODO: यहाँ से इस टोकन को बैकएंड पर भेजना है ताकि वो WABA ID और Phone ID निकाल सके
-        alert("Facebook Link Successful! Now we need to fetch WABA ID from backend.");
+        console.log('Login Success! Token:', token);
+        alert("Facebook Login Successful! Token received.");
       } else {
-        console.log('User cancelled login or did not fully authorize.');
+        console.log('User cancelled login.');
       }
     }, {
-      scope: 'business_management,whatsapp_business_management,whatsapp_business_messaging',
-      extras: { feature: 'whatsapp_embedded_signup' }
+      // बस यहाँ से extras वाला हिस्सा हटा दिया
+      scope: 'business_management,whatsapp_business_management,whatsapp_business_messaging'
     });
   };
 
