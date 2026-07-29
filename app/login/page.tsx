@@ -10,8 +10,10 @@ import { motion } from "framer-motion";
 export default function LoginPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
+  const [isMounted, setIsMounted] = useState(false); // Yeh naya state add kiya hai
 
   useEffect(() => {
+    setIsMounted(true); // Hydration fix
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
         router.push("/");
@@ -38,16 +40,11 @@ export default function LoginPage() {
     }
   };
 
-  // Loading Screen
-  if (loading) {
+  // Jab tak page theek se load na ho, tab tak Loader dikhao (White box/crash fix)
+  if (!isMounted || loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#FAFAFA] text-black">
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
-        >
-          <Loader2 className="w-10 h-10 text-gray-400" />
-        </motion.div>
+        <Loader2 className="w-10 h-10 text-gray-400 animate-spin" />
       </div>
     );
   }
