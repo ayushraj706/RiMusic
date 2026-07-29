@@ -4,11 +4,11 @@ import React, { useRef, useState, useEffect, useCallback } from "react";
 import {
   Send, Loader2, Plus, Image as ImageIcon, Video, FileText,
   MapPin, X, Camera, Mic, IndianRupee, MessageSquare,
-  Link2, LayoutTemplate, Download, Eye, StopCircle, Pause, Play,
+  Link2, LayoutTemplate, Download, Eye, Pause, Play,
   Smile, Check,
 } from "lucide-react";
 import EmojiPicker, { EmojiClickData, Theme } from "emoji-picker-react";
-import TemplatePicker from "./TemplatePicker"; // NAYA COMPONENT IMPORT KIYA
+import TemplatePicker from "./TemplatePicker"; 
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -37,7 +37,7 @@ interface ChatInputProps {
   onSendMedia?: (file: File, type: "image" | "video" | "document" | "audio") => Promise<void>;
   onSendLocation?: (lat: number, lng: number) => void;
   onSendInteractive?: (type: "quick_reply" | "url") => void;
-  onSendTemplate?: (template: any) => void; // Update kiya taaki selected template receive kar sake
+  onSendTemplate?: (template: any) => void; 
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -228,7 +228,7 @@ export default function ChatInput({
   const [isRecording, setIsRecording] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
-  const [showTemplatePicker, setShowTemplatePicker] = useState(false); // NEW STATE FOR TEMPLATES
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false); 
 
   const [pendingMedias, setPendingMedias] = useState<MultiMediaPreview | null>(null);
   const [isSendingMedia, setIsSendingMedia] = useState(false);
@@ -272,14 +272,31 @@ export default function ChatInput({
   };
 
   const handleCancelPendingMedias = () => { if (pendingMedias) pendingMedias.files.forEach((i) => URL.revokeObjectURL(i.url)); setPendingMedias(null); };
+
   const handleAddMore = () => { multiImageInputRef.current?.click(); };
 
+  // 🔥 YAHAN LOCATION LOGIC KO EK DAM FIX KIYA GAYA HAI
   const handleLocationClick = () => {
-    if (!navigator.geolocation) return alert("Geolocation not supported.");
+    if (!navigator.geolocation) {
+      alert("Location is not supported by your browser.");
+      return;
+    }
     setIsLocating(true);
     navigator.geolocation.getCurrentPosition(
-      (pos) => { onSendLocation?.(pos.coords.latitude, pos.coords.longitude); setIsLocating(false); setShowMediaMenu(false); },
-      () => { alert("Location access denied."); setIsLocating(false); setShowMediaMenu(false); }
+      (pos) => {
+        onSendLocation?.(pos.coords.latitude, pos.coords.longitude);
+        setIsLocating(false);
+        setShowMediaMenu(false);
+      },
+      (err) => {
+        console.error("Location error:", err);
+        if (err.code === 1) alert("Permission Denied: Location permission allow karein.");
+        else if (err.code === 2) alert("Position Unavailable: Apna GPS/Location On karein.");
+        else alert("Time Out: Location fetch nahi ho payi.");
+        setIsLocating(false);
+        setShowMediaMenu(false);
+      },
+      { timeout: 15000, enableHighAccuracy: true, maximumAge: 0 } // Taaki purani location na uthaye
     );
   };
 
@@ -292,6 +309,7 @@ export default function ChatInput({
 
   const mediaOptions = [
     { icon: ImageIcon, label: "Photo", color: "text-blue-500", bg: "bg-blue-50", action: () => multiImageInputRef.current?.click() },
+    // 🔥 CAMERA SE CAPTURE="ENVIRONMENT" HATA DIYA HAI TAAKI SEEDHA CAMERA NA KHULE
     { icon: Camera, label: "Camera", color: "text-pink-500", bg: "bg-pink-50", action: () => videoInputRef.current?.click() },
     { icon: FileText, label: "Document", color: "text-purple-500", bg: "bg-purple-50", action: () => docInputRef.current?.click() },
     { icon: isLocating ? Loader2 : MapPin, label: "Location", color: "text-green-500", bg: "bg-green-50", action: handleLocationClick, spin: isLocating },
@@ -300,20 +318,19 @@ export default function ChatInput({
   const interactiveOptions = [
     { icon: MessageSquare, label: "Quick Reply", color: "text-blue-600", bg: "bg-blue-50", action: () => { onSendInteractive?.("quick_reply"); setShowInteractiveMenu(false); } },
     { icon: Link2, label: "URL Button", color: "text-teal-600", bg: "bg-teal-50", action: () => { onSendInteractive?.("url"); setShowInteractiveMenu(false); } },
-    { icon: LayoutTemplate, label: "Template", color: "text-indigo-600", bg: "bg-indigo-50", action: () => { setShowTemplatePicker(true); setShowInteractiveMenu(false); } }, // CHANGED HERE TO OPEN TEMPLATE PICKER
+    { icon: LayoutTemplate, label: "Template", color: "text-indigo-600", bg: "bg-indigo-50", action: () => { setShowTemplatePicker(true); setShowInteractiveMenu(false); } }, 
   ];
 
   const activeOptions = showMediaMenu ? mediaOptions : interactiveOptions;
 
   return (
-    // 🌟 PATLA KIYA GAYA AUR NICHE (bottom-1) KIYA GAYA FLOATING WRAPPER
-    <div className="absolute bottom-1 sm:bottom-2 left-0 right-0 z-40 px-2 sm:px-4 pointer-events-none flex justify-center">
+    // 🌟 INPUT BOX KO EKDAM NEECHE (bottom-0 pb-1) CHIPKA DIYA HAI
+    <div className="absolute bottom-0 w-full z-40 px-1 sm:px-4 pb-1 sm:pb-2 pointer-events-none flex justify-center">
       
-      {/* 🌟 SLIM FLOATING PILL */}
-      <div className="w-full max-w-4xl bg-white/95 backdrop-blur-xl border border-gray-200/60 shadow-[0_8px_30px_rgb(0,0,0,0.12)] rounded-[28px] pointer-events-auto p-1 flex flex-col transition-all duration-300 animate-in slide-in-from-bottom-5 fade-in">
+      <div className="w-full max-w-4xl bg-white/95 backdrop-blur-xl border border-gray-200/80 shadow-[0_4px_25px_rgb(0,0,0,0.1)] rounded-[24px] pointer-events-auto p-1 flex flex-col transition-all duration-300 animate-in slide-in-from-bottom-5 fade-in">
 
         <input type="file" ref={multiImageInputRef} accept="image/*,video/*" multiple className="hidden" onChange={(e) => handleFileChange(e, "image")} />
-        <input type="file" ref={videoInputRef} accept="image/*,video/*" capture="environment" className="hidden" onChange={(e) => handleFileChange(e, "video")} />
+        <input type="file" ref={videoInputRef} accept="image/*,video/*" className="hidden" onChange={(e) => handleFileChange(e, "video")} />
         <input type="file" ref={docInputRef} accept=".pdf,.doc,.docx,.txt" className="hidden" onChange={(e) => handleFileChange(e, "document")} />
 
         {pendingMedias && (
@@ -333,14 +350,12 @@ export default function ChatInput({
           </div>
         )}
 
-        {/* TEMPLATE PICKER POPUP (NEW) */}
+        {/* 🔥 YAHAN SE PROPS HATAYE GAYE HAIN TAAKI YEH FIREBASE SE DIRECT ID LE SAKE */}
         {showTemplatePicker && (
           <TemplatePicker
-            wabaId={phoneId} // Passing credentials
-            accessToken={accessToken}
             onClose={() => setShowTemplatePicker(false)}
             onSelect={(template) => {
-              onSendTemplate?.(template); // Calling backend logic with selected template
+              onSendTemplate?.(template); 
               setShowTemplatePicker(false);
             }}
           />
@@ -365,7 +380,6 @@ export default function ChatInput({
           </div>
         )}
 
-        {/* MAIN ROW - THINNER & MORE COMPACT */}
         <div className="flex items-end gap-1.5 px-1 py-0.5">
 
           {isRecording ? (
