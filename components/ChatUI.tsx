@@ -157,7 +157,7 @@ export default function ChatUI() {
       {/* ─── Chat Area (WhatsApp Doodle Background) ─── */}
       <div 
         ref={chatContainerRef}
-        className="flex-1 overflow-y-auto px-2 sm:px-4 pt-4 pb-32" // pb-32 is important because of floating input
+        className="flex-1 overflow-y-auto px-2 sm:px-4 pt-4 pb-[100px]" // 🔥 pb-[100px] add kiya taaki aakhiri message InpuBox ke piche na chhupe
         style={{
           backgroundImage: `url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png')`,
           backgroundSize: "400px",
@@ -205,11 +205,16 @@ export default function ChatUI() {
         onCancelReply={() => setReplyingTo(null)}
         activeContactName="BaseKey Support"
         
-        // Dummy functions for media/location/interactive buttons so they don't throw errors
+        // Dummy functions for media/location/interactive buttons
         onSendMedia={async (file, type) => console.log("Media sent:", type)}
         onSendLocation={(lat, lng) => console.log("Location sent:", lat, lng)}
         onSendInteractive={(type) => console.log("Interactive sent:", type)}
-        onSendTemplate={() => alert("Template Picker open hoga!")}
+        
+        // 🔥 Template receive karne ka naya function
+        onSendTemplate={(template) => {
+          console.log("Template Received from Picker:", template);
+          alert(`Template '${template.name}' selected! (Iska aage ka logic abhi jorna baaki hai)`);
+        }}
       />
     </div>
   );
