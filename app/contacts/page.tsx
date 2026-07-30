@@ -6,7 +6,7 @@ import {
   UploadCloud, Chrome, FileSpreadsheet, 
   MoreVertical, CheckSquare, Phone, Loader2
 } from "lucide-react";
-import { auth, database } from "@/lib/firebase";
+import { auth, database } from "../lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { ref, onValue, update, push } from "firebase/database";
 
@@ -84,9 +84,12 @@ export default function ContactsPage() {
 
   // ─── GOOGLE CONTACTS IMPORT ───
   const handleGoogleImport = () => {
-    if (!window.google) return alert("Google script loading, please wait...");
+    // TypeScript bypass: window ko 'any' declare kiya taaki Vercel build fail na ho
+    const win = window as any;
+
+    if (!win.google) return alert("Google script loading, please wait...");
     
-    const client = window.google.accounts.oauth2.initTokenClient({
+    const client = win.google.accounts.oauth2.initTokenClient({
       client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "",
       scope: "https://www.googleapis.com/auth/contacts.readonly",
       callback: async (response: any) => {
