@@ -6,7 +6,7 @@ import {
   UploadCloud, Chrome, FileSpreadsheet, 
   MoreVertical, CheckSquare, Phone, Loader2
 } from "lucide-react";
-import { auth, database } from "../lib/firebase";
+import { auth, database } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { ref, onValue, update, push } from "firebase/database";
 
