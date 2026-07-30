@@ -7,7 +7,7 @@ import {
   Link2, LayoutTemplate, Download, Eye, Pause, Play, Smile, Check
 } from "lucide-react";
 import EmojiPicker, { EmojiClickData, Theme } from "emoji-picker-react";
-import TemplatePicker from "./TemplatePicker"; 
+import TemplatePicker from "./TemplatePicker";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -36,7 +36,7 @@ interface ChatInputProps {
   onSendMedia?: (file: File, type: "image" | "video" | "document" | "audio") => Promise<void>;
   onSendLocation?: (lat: number, lng: number) => void;
   onSendInteractive?: (type: "quick_reply" | "url") => void;
-  onSendTemplate?: (template: any) => void; 
+  onSendTemplate?: (template: any) => void;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -51,6 +51,13 @@ function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60).toString().padStart(2, "0");
   const s = Math.floor(seconds % 60).toString().padStart(2, "0");
   return `${m}:${s}`;
+}
+
+// Works out the real media kind of a picked file instead of trusting a fixed label
+function detectKind(file: File): "image" | "video" | "document" {
+  if (file.type.startsWith("image/")) return "image";
+  if (file.type.startsWith("video/")) return "video";
+  return "document";
 }
 
 async function convertAudioToOgg(blob: Blob): Promise<File> {
@@ -92,15 +99,6 @@ function MultiMediaBubble({ previews, isSending, onCancel, onSend, onAddMore }: 
   const items = previews.files;
   const active = items[activeIndex];
 
-  const handleDownloadAll = () => {
-    items.forEach((item) => {
-      const a = document.createElement("a");
-      a.href = item.url;
-      a.download = item.name;
-      a.click();
-    });
-  };
-
   const handleSendClick = () => {
     setSendAnim(true);
     setTimeout(() => {
@@ -135,6 +133,15 @@ function MultiMediaBubble({ previews, isSending, onCancel, onSend, onAddMore }: 
                   </div>
                 )}
               </div>
+            ) : active?.type === "video" ? (
+              <div className="relative rounded-2xl overflow-hidden shadow-xl bg-black">
+                <video src={active.url} className="w-full max-h-48 rounded-2xl" controls />
+                {isSending && (
+                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center rounded-2xl pointer-events-none">
+                    <Loader2 className="w-7 h-7 text-white animate-spin" />
+                  </div>
+                )}
+              </div>
             ) : (
               <div className="bg-white rounded-2xl p-3 shadow-md flex items-center gap-3 border border-gray-100">
                 <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center shrink-0"><FileText className="w-5 h-5 text-purple-600" /></div>
@@ -143,6 +150,18 @@ function MultiMediaBubble({ previews, isSending, onCancel, onSend, onAddMore }: 
               </div>
             )}
           </div>
+
+          {items.length > 1 && (
+            <div className="flex gap-1.5 mt-2 justify-end flex-wrap">
+              {items.map((_, i) => (
+                <button
+                  key={i}
+                  onClick={() => setActiveIndex(i)}
+                  className={`w-2 h-2 rounded-full transition ${i === activeIndex ? "bg-[#00A884]" : "bg-gray-300"}`}
+                />
+              ))}
+            </div>
+          )}
 
           {!isSending && (
             <div className="flex gap-2 mt-2 justify-end items-center">
@@ -168,7 +187,6 @@ interface AudioRecorderProps {
 
 function AudioRecorder({ onStop, onCancel }: AudioRecorderProps) {
   const [elapsed, setElapsed] = useState(0);
-  const [isPaused, setIsPaused] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -217,9 +235,9 @@ export default function ChatInput({
   inputText, setInputText, onSend, isSending, disabled = false, replyingTo, onCancelReply, activeContactName = "Contact", onSendMedia, onSendLocation, onSendInteractive, onSendTemplate
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const multiImageInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const docInputRef = useRef<HTMLInputElement>(null);
-  const videoInputRef = useRef<HTMLInputElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
 
   const [showMediaMenu, setShowMediaMenu] = useState(false);
@@ -227,7 +245,7 @@ export default function ChatInput({
   const [isRecording, setIsRecording] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
-  const [showTemplatePicker, setShowTemplatePicker] = useState(false); 
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
 
   const [pendingMedias, setPendingMedias] = useState<MultiMediaPreview | null>(null);
   const [isSendingMedia, setIsSendingMedia] = useState(false);
@@ -255,32 +273,49 @@ export default function ChatInput({
     textareaRef.current?.focus();
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, type: "image" | "video" | "document") => {
+  // Shared handler for gallery, camera and document inputs — detects the real
+  // file kind instead of trusting a fixed label, so a video picked from the
+  // gallery is never mislabeled as an image.
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, forcedType?: "document") => {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
-    const newItems = files.map((file) => ({ file, type, url: URL.createObjectURL(file), name: file.name, size: formatBytes(file.size) }));
-    setPendingMedias((prev) => prev ? { files: [...prev.files, ...newItems] } : { files: newItems });
-    setShowMediaMenu(false); e.target.value = "";
+    const newItems = files.map((file) => ({
+      file,
+      type: forcedType || detectKind(file),
+      url: URL.createObjectURL(file),
+      name: file.name,
+      size: formatBytes(file.size),
+    }));
+    setPendingMedias((prev) => (prev ? { files: [...prev.files, ...newItems] } : { files: newItems }));
+    setShowMediaMenu(false);
+    e.target.value = "";
   };
 
   const handleSendPendingMedias = async () => {
     if (!pendingMedias || !onSendMedia) return;
     setIsSendingMedia(true);
-    try { for (const item of pendingMedias.files) { await onSendMedia(item.file, item.type); } } 
-    finally { pendingMedias.files.forEach((i) => URL.revokeObjectURL(i.url)); setPendingMedias(null); setIsSendingMedia(false); }
+    try {
+      for (const item of pendingMedias.files) {
+        await onSendMedia(item.file, item.type);
+      }
+    } finally {
+      pendingMedias.files.forEach((i) => URL.revokeObjectURL(i.url));
+      setPendingMedias(null);
+      setIsSendingMedia(false);
+    }
   };
 
   const handleCancelPendingMedias = () => { if (pendingMedias) pendingMedias.files.forEach((i) => URL.revokeObjectURL(i.url)); setPendingMedias(null); };
 
-  // 🔥 EKDAM PERFECT LOCATION LOGIC
+  // Location sharing via the browser's Geolocation API
   const handleLocationClick = () => {
     if (!navigator.geolocation) {
       alert("Aapka browser location support nahi karta.");
       return;
     }
-    
+
     setIsLocating(true);
-    
+
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         onSendLocation?.(pos.coords.latitude, pos.coords.longitude);
@@ -292,11 +327,11 @@ export default function ChatInput({
         if (err.code === 1) alert("Permission Denied: Kripya apne browser ki location permission allow karein.");
         else if (err.code === 2) alert("Position Unavailable: Kripya apne phone ka GPS (Location) ON karein.");
         else alert("Timeout: Location nahi mil payi. Thodi der baad try karein.");
-        
+
         setIsLocating(false);
         setShowMediaMenu(false);
       },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 } // Advanced options taki fail na ho
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     );
   };
 
@@ -308,9 +343,8 @@ export default function ChatInput({
   }, [onSendMedia]);
 
   const mediaOptions = [
-    { icon: ImageIcon, label: "Photo", color: "text-blue-500", bg: "bg-blue-50", action: () => multiImageInputRef.current?.click() },
-    // 🔥 CAMERA SE CAPTURE HATA DIYA HAIN
-    { icon: Camera, label: "Camera", color: "text-pink-500", bg: "bg-pink-50", action: () => videoInputRef.current?.click() },
+    { icon: ImageIcon, label: "Gallery", color: "text-blue-500", bg: "bg-blue-50", action: () => galleryInputRef.current?.click() },
+    { icon: Camera, label: "Camera", color: "text-pink-500", bg: "bg-pink-50", action: () => cameraInputRef.current?.click() },
     { icon: FileText, label: "Document", color: "text-purple-500", bg: "bg-purple-50", action: () => docInputRef.current?.click() },
     { icon: isLocating ? Loader2 : MapPin, label: "Location", color: "text-green-500", bg: "bg-green-50", action: handleLocationClick, spin: isLocating },
   ];
@@ -323,18 +357,30 @@ export default function ChatInput({
 
   const activeOptions = showMediaMenu ? mediaOptions : interactiveOptions;
 
+  if (isRecording) {
+    return (
+      <div className="absolute bottom-0 w-full z-40 px-1 sm:px-2 pb-1 pointer-events-none flex justify-center">
+        <div className="w-full max-w-4xl bg-white/95 backdrop-blur-xl border border-gray-200/80 shadow-[0_4px_25px_rgb(0,0,0,0.1)] rounded-[24px] pointer-events-auto p-1.5">
+          <AudioRecorder onStop={handleAudioStop} onCancel={() => setIsRecording(false)} />
+        </div>
+      </div>
+    );
+  }
+
   return (
-    // 🌟 EKDAM BOTTOM PAR CHIPKA HUA (bottom-0 pb-1)
     <div className="absolute bottom-0 w-full z-40 px-1 sm:px-2 pb-1 pointer-events-none flex justify-center">
-      
+
       <div className="w-full max-w-4xl bg-white/95 backdrop-blur-xl border border-gray-200/80 shadow-[0_4px_25px_rgb(0,0,0,0.1)] rounded-[24px] pointer-events-auto p-1 flex flex-col transition-all duration-300">
 
-        <input type="file" ref={multiImageInputRef} accept="image/*,video/*" multiple className="hidden" onChange={(e) => handleFileChange(e, "image")} />
-        <input type="file" ref={videoInputRef} accept="image/*,video/*" className="hidden" onChange={(e) => handleFileChange(e, "video")} />
-        <input type="file" ref={docInputRef} accept=".pdf,.doc,.docx,.txt" className="hidden" onChange={(e) => handleFileChange(e, "document")} />
+        {/* Gallery: pick existing photos/videos, multiple allowed */}
+        <input type="file" ref={galleryInputRef} accept="image/*,video/*" multiple className="hidden" onChange={(e) => handleFileChange(e)} />
+        {/* Camera: opens the device camera directly and captures a photo */}
+        <input type="file" ref={cameraInputRef} accept="image/*" capture="environment" className="hidden" onChange={(e) => handleFileChange(e)} />
+        {/* Document */}
+        <input type="file" ref={docInputRef} accept=".pdf,.doc,.docx,.txt,.xls,.xlsx" className="hidden" onChange={(e) => handleFileChange(e, "document")} />
 
         {pendingMedias && (
-          <MultiMediaBubble previews={pendingMedias} isSending={isSendingMedia} onCancel={handleCancelPendingMedias} onSend={handleSendPendingMedias} onAddMore={() => multiImageInputRef.current?.click()} />
+          <MultiMediaBubble previews={pendingMedias} isSending={isSendingMedia} onCancel={handleCancelPendingMedias} onSend={handleSendPendingMedias} onAddMore={() => galleryInputRef.current?.click()} />
         )}
 
         {replyingTo && !pendingMedias && (
