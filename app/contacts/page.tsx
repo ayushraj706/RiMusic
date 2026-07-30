@@ -6,7 +6,8 @@ import {
   UploadCloud, Chrome, FileSpreadsheet, 
   MoreVertical, CheckSquare, Phone, Loader2
 } from "lucide-react";
-import { auth, database } from "../lib/firebase";
+// 👇 YAHAN PATH FIX HAI (@/lib/firebase)
+import { auth, database } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { ref, onValue, update, push } from "firebase/database";
 
@@ -84,7 +85,7 @@ export default function ContactsPage() {
 
   // ─── GOOGLE CONTACTS IMPORT ───
   const handleGoogleImport = () => {
-    // TypeScript bypass: window ko 'any' declare kiya taaki Vercel build fail na ho
+    // 👇 YAHAN TYPESCRIPT ERROR FIX HAI
     const win = window as any;
 
     if (!win.google) return alert("Google script loading, please wait...");
