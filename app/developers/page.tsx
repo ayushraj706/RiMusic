@@ -22,8 +22,6 @@ export default function DevelopersPage() {
   const [wabaId, setWabaId] = useState<string>("");
   const [accessToken, setAccessToken] = useState<string>("");
   const [phoneId, setPhoneId] = useState<string>("");
-  
-  // 👇 UPDATE: अब हम सिर्फ नाम नहीं, बल्कि पूरा टेम्प्लेट ऑब्जेक्ट सेव करेंगे
   const [availableTemplates, setAvailableTemplates] = useState<any[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState("");
   const [savedApis, setSavedApis] = useState<SavedAPI[]>([]);
@@ -52,7 +50,8 @@ export default function DevelopersPage() {
         onValue(apiRef, (snapshot) => {
           if (snapshot.exists()) {
             const apisArray: SavedAPI[] = [];
-            snapshot.forEach((child) => {
+            // Vercel fix: child parameter explicitly typed as any
+            snapshot.forEach((child: any) => {
               apisArray.push({ id: child.key, ...child.val() });
             });
             setSavedApis(apisArray.reverse());
@@ -75,7 +74,6 @@ export default function DevelopersPage() {
       if (result.data) {
         const approved = result.data.filter((t: any) => t.status === "APPROVED");
         
-        // डुप्लीकेट नाम हटाना लेकिन पूरा ऑब्जेक्ट रखना
         const uniqueTemplatesMap = new Map();
         approved.forEach((t: any) => {
            if(!uniqueTemplatesMap.has(t.name)) uniqueTemplatesMap.set(t.name, t);
@@ -131,7 +129,6 @@ export default function DevelopersPage() {
     }
   };
 
-  // 👇 UPDATE: Dynamic Variables Helper
   const getDummyVariables = (tplName: string) => {
     const tplDef = availableTemplates.find(t => t.name === tplName);
     if (!tplDef || !tplDef.components) return [];
@@ -152,7 +149,6 @@ export default function DevelopersPage() {
 
     setSendingStatus({ ...sendingStatus, [api.id]: true });
 
-    // डायनामिक कम्पोनेंट्स बनाना
     const tplDef = availableTemplates.find(t => t.name === api.templateName);
     let dynamicComponents: any[] = [];
     
@@ -160,7 +156,8 @@ export default function DevelopersPage() {
     if (dummyVars.length > 0) {
        dynamicComponents.push({
          type: "body",
-         parameters: dummyVars.map(val => ({ type: "text", text: val }))
+         // 👇 Vercel fix: (val: string) लगा दिया गया है
+         parameters: dummyVars.map((val: string) => ({ type: "text", text: val }))
        });
     }
 
@@ -178,7 +175,6 @@ export default function DevelopersPage() {
           template: {
             name: api.templateName,
             language: { code: tplDef ? tplDef.language : "en_US" },
-            // अगर वेरिएबल्स हैं, तभी components ऐरे भेजेंगे
             ...(dynamicComponents.length > 0 && { components: dynamicComponents })
           }
         })
@@ -245,8 +241,8 @@ export default function DevelopersPage() {
                   onChange={(e) => setSelectedTemplate(e.target.value)}
                   className="w-full bg-white border border-gray-200 text-gray-800 text-sm rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-[#00A884]/20 focus:border-[#00A884] shadow-sm font-medium"
                 >
-                  {/* UPDATE: Object से नाम निकाल रहे हैं */}
-                  {availableTemplates.map(tpl => (
+                  {/* 👇 Vercel fix: (tpl: any) लगा दिया गया है */}
+                  {availableTemplates.map((tpl: any) => (
                     <option key={tpl.name} value={tpl.name}>{tpl.name}</option>
                   ))}
                 </select>
@@ -277,7 +273,6 @@ export default function DevelopersPage() {
             ) : (
               savedApis.map((api) => {
                 const currentPhone = testPhones[api.id] || "919876543210";
-                // 👇 UPDATE: इस टेम्प्लेट के लिए कितने वेरिएबल चाहिए, वो यहाँ से निकाल रहे हैं
                 const requiredVars = getDummyVariables(api.templateName);
                 
                 return (
