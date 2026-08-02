@@ -3,9 +3,8 @@
 import { useState, useEffect } from "react";
 import { database, auth } from "../lib/firebase";
 import { ref, set } from "firebase/database";
-import { X, Key, Phone, Link2, CheckCircle2, Copy, ShieldAlert, Check, Facebook } from "lucide-react";
+import { X, Key, Phone, Link2, CheckCircle2, Copy, ShieldAlert, Check, Facebook, Loader2 } from "lucide-react";
 
-// TypeScript के लिए Window ऑब्जेक्ट में FB को डिक्लेअर कर रहे हैं
 declare global {
   interface Window {
     fbAsyncInit: any;
@@ -20,7 +19,6 @@ interface ConfigModalProps {
 }
 
 export default function ConfigModal({ isOpen, onClose, onSuccess }: ConfigModalProps) {
-  // नया स्टेट: टैब स्विच करने के लिए (auto या manual)
   const [setupMode, setSetupMode] = useState<"auto" | "manual">("auto");
   
   const [accessToken, setAccessToken] = useState("");
@@ -29,6 +27,7 @@ export default function ConfigModal({ isOpen, onClose, onSuccess }: ConfigModalP
   const [verifyToken, setVerifyToken] = useState("");
   const [webhookUrl, setWebhookUrl] = useState("");
   const [loading, setLoading] = useState(false);
+  const [isFbLoggingIn, setIsFbLoggingIn] = useState(false); // FB Login Button की लोडिंग के लिए
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
   // 1. Data Load & Webhook URL Setup
@@ -55,12 +54,12 @@ export default function ConfigModal({ isOpen, onClose, onSuccess }: ConfigModalP
     }
   }, [isOpen]);
 
-  // 2. Facebook SDK Load (सिर्फ एक बार लोड होगा)
+  // 2. Facebook SDK Load
   useEffect(() => {
     if (isOpen) {
       window.fbAsyncInit = function() {
         window.FB.init({
-          appId      : '919361547126340', // तुम्हारी SuperKey App ID
+          appId      : '919361547126340', 
           cookie     : true,
           xfbml      : true,
           version    : 'v20.0'
@@ -103,7 +102,7 @@ export default function ConfigModal({ isOpen, onClose, onSuccess }: ConfigModalP
           webhookUrl,
           configuredAt: new Date().toISOString(),
           isWebhookVerified: false,
-          setupType: "manual" // पता चले कि मैनुअल किया है
+          setupType: "manual" 
         });
         
         onSuccess(); 
@@ -116,18 +115,43 @@ export default function ConfigModal({ isOpen, onClose, onSuccess }: ConfigModalP
     setLoading(false);
   };
 
+  // ✅ UPDATED: Facebook Embedded Signup Logic
   const handleFacebookLogin = () => {
+    if (!window.FB) {
+      alert("Facebook SDK is still loading. Please try again in a few seconds.");
+      return;
+    }
+
+    setIsFbLoggingIn(true);
+
+    // .env से Config ID लेगा, अगर नहीं मिला तो तुम्हारा टेस्टिंग वाला इस्तेमाल करेगा
+    const configId = process.env.NEXT_PUBLIC_META_CONFIG_ID || '1392579292765106';
+
     window.FB.login((response: any) => {
+      setIsFbLoggingIn(false);
+
       if (response.authResponse) {
-        const token = response.authResponse.accessToken;
-        console.log('Login Success! Token:', token);
-        alert("Facebook Login Successful! Token received.");
+        // Embedded Signup में Token की जगह 'code' आता है
+        const code = response.authResponse.code;
+        console.log('WhatsApp Onboarding Success! Auth Code:', code);
+        
+        alert("Success! Check Console for Auth Code.");
+        
+        // TODO: Next step me is 'code' ko backend par bhej kar Permanent Token lena hoga
+        
       } else {
-        console.log('User cancelled login.');
+        console.log('User cancelled login or did not fully authorize.');
       }
     }, {
-      // बस यहाँ से extras वाला हिस्सा हटा दिया
-      scope: 'business_management,whatsapp_business_management,whatsapp_business_messaging'
+      config_id: configId,
+      response_type: 'code',
+      override_default_response_type: true,
+      extras: {
+        setup: {},
+        dataLayer: {
+          current_step: 'whatsapp_onboarding'
+        }
+      }
     });
   };
 
@@ -157,7 +181,7 @@ export default function ConfigModal({ isOpen, onClose, onSuccess }: ConfigModalP
           </button>
         </div>
 
-        {/* Tabs (Auto vs Manual) */}
+        {/* Tabs */}
         <div className="flex px-6 pt-4 gap-4 bg-gray-50/50">
           <button 
             onClick={() => setSetupMode("auto")}
@@ -190,14 +214,19 @@ export default function ConfigModal({ isOpen, onClose, onSuccess }: ConfigModalP
               </div>
               <button 
                 onClick={handleFacebookLogin}
-                className="flex items-center gap-2 bg-[#1877F2] text-white px-8 py-3.5 rounded-xl font-bold hover:bg-[#166FE5] hover:shadow-lg hover:shadow-blue-500/30 active:scale-95 transition-all"
+                disabled={isFbLoggingIn}
+                className="flex items-center gap-2 bg-[#1877F2] text-white px-8 py-3.5 rounded-xl font-bold hover:bg-[#166FE5] hover:shadow-lg hover:shadow-blue-500/30 active:scale-95 transition-all disabled:opacity-70 disabled:cursor-not-allowed"
               >
-                <Facebook className="w-5 h-5" /> Continue with Facebook
+                {isFbLoggingIn ? (
+                  <><Loader2 className="w-5 h-5 animate-spin" /> Connecting...</>
+                ) : (
+                  <><Facebook className="w-5 h-5" /> Continue with Facebook</>
+                )}
               </button>
             </div>
           )}
 
-          {/* MANUAL MODE UI (तुम्हारा पुराना फॉर्म) */}
+          {/* MANUAL MODE UI */}
           {setupMode === "manual" && (
             <div className="space-y-5 animate-in fade-in slide-in-from-bottom-2 duration-300">
               <div className="space-y-1.5">
@@ -261,7 +290,7 @@ export default function ConfigModal({ isOpen, onClose, onSuccess }: ConfigModalP
           )}
         </div>
 
-        {/* Footer (सिर्फ Manual Mode में दिखेगा) */}
+        {/* Footer (Manual Mode Only) */}
         {setupMode === "manual" && (
           <div className="p-6 border-t border-gray-100 bg-white flex justify-end gap-3 rounded-b-3xl">
             <button onClick={onClose} className="px-6 py-3 rounded-xl font-semibold text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-all">Cancel</button>
