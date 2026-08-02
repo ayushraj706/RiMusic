@@ -13,7 +13,7 @@ import {
   CheckCircle2,
   Loader2,
   Link2,
-  Bot,
+  Bot, // Retained as requested
   LayoutTemplate,
   LayoutDashboard,
   Megaphone,
@@ -113,7 +113,9 @@ export default function Sidebar() {
     },
   ];
 
+  // NAYA: Asli Settings page yahan add kar diya hai
   const bottomItems = [
+    { href: "/settings", icon: Settings, label: "Settings", activePaths: ["/settings"] },
     { href: "/developers", icon: Code2, label: "Developers", activePaths: ["/developers"] },
     { href: "/help", icon: HelpCircle, label: "Help Center", activePaths: ["/help"] },
   ];
@@ -247,18 +249,18 @@ export default function Sidebar() {
 
         {/* Bottom section */}
         <div className={`flex flex-col pb-4 pt-2 border-t border-gray-100 gap-0.5 px-2`}>
-          {/* Bottom nav items */}
+          {/* Bottom nav items (Settings yahan automatically aa jayega array se) */}
           {bottomItems.map((item) => {
             const active = isActive(item.activePaths);
             return (
               <Link key={item.href} href={item.href}>
                 <div
                   className={`group flex items-center gap-3 rounded-lg px-2.5 py-2 cursor-pointer transition-all duration-150 ${
-                    active ? "text-[#25D366]" : "text-gray-400 hover:bg-gray-50 hover:text-gray-600"
+                    active ? "text-[#25D366] bg-[#e8faf0]" : "text-gray-400 hover:bg-gray-50 hover:text-gray-600"
                   } ${collapsed ? "justify-center px-0" : ""}`}
                   title={collapsed ? item.label : undefined}
                 >
-                  <item.icon className={`shrink-0 ${collapsed ? "w-5 h-5" : "w-4 h-4"}`} />
+                  <item.icon className={`shrink-0 ${collapsed ? "w-5 h-5" : "w-4 h-4"} ${active ? "text-[#25D366]" : ""}`} />
                   {!collapsed && (
                     <span className="text-[13px] font-medium whitespace-nowrap">{item.label}</span>
                   )}
@@ -272,22 +274,18 @@ export default function Sidebar() {
             );
           })}
 
-          {/* Settings / Connect */}
+          {/* NAYA: Settings ko Configuration bana diya aur Modal link kar diya */}
           <div
             className={`flex items-center gap-3 rounded-lg px-2.5 py-2 cursor-pointer transition-all duration-150 text-gray-400 hover:bg-gray-50 hover:text-gray-600 ${
               collapsed ? "justify-center px-0" : ""
             }`}
             onClick={() => setIsModalOpen(true)}
-            title={collapsed ? (isMatched ? "Settings" : "Connect API") : undefined}
+            title={collapsed ? (isMatched ? "Configuration" : "Connect API") : undefined}
           >
-            {isMatched ? (
-              <Settings className={`shrink-0 ${collapsed ? "w-5 h-5" : "w-4 h-4"}`} />
-            ) : (
-              <Link2 className={`shrink-0 text-gray-700 ${collapsed ? "w-5 h-5" : "w-4 h-4"}`} />
-            )}
+            <Link2 className={`shrink-0 text-gray-700 ${collapsed ? "w-5 h-5" : "w-4 h-4"}`} />
             {!collapsed && (
               <span className="text-[13px] font-medium text-gray-600">
-                {isMatched ? "Settings" : "Connect API"}
+                {isMatched ? "Configuration" : "Connect API"}
               </span>
             )}
           </div>
@@ -323,7 +321,7 @@ export default function Sidebar() {
       </aside>
 
       {/* ================================================ */}
-      {/* MOBILE BOTTOM BAR                                */}
+      {/* MOBILE BOTTOM BAR (FIXED: Scrollable, All Buttons Visible) */}
       {/* ================================================ */}
       <nav
         className={`md:hidden fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-gray-100 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] transition-all duration-300 ease-in-out ${
@@ -332,13 +330,15 @@ export default function Sidebar() {
             : "translate-y-0 opacity-100"
         }`}
       >
-        <div className="flex items-center justify-around h-16 px-1">
+        {/* Scrollable Container added to fix missing buttons */}
+        <div className="flex items-center h-16 px-2 overflow-x-auto gap-2 w-full [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
           {isMatched ? (
             <>
-              {navItems.slice(0, 4).map((item) => {
+              {/* NAYA: slice(0,4) hata diya. Ab saare Nav items dikhenge */}
+              {navItems.map((item) => {
                 const active = isActive(item.activePaths);
                 return (
-                  <Link key={item.href} href={item.href} className="flex-1">
+                  <Link key={item.href} href={item.href} className="flex-1 min-w-[70px] shrink-0">
                     <div className="flex flex-col items-center justify-center gap-0.5 py-1.5">
                       <div
                         className={`relative w-9 h-9 rounded-xl flex items-center justify-center transition-all ${
@@ -364,19 +364,33 @@ export default function Sidebar() {
                 );
               })}
 
-              {/* Settings button */}
+              {/* Asli Settings button in mobile */}
+              <Link href="/settings" className="flex-1 min-w-[70px] shrink-0">
+                <div className="flex flex-col items-center justify-center gap-0.5 py-1.5">
+                  <div className={`relative w-9 h-9 rounded-xl flex items-center justify-center transition-all ${
+                    pathname === "/settings" || pathname?.startsWith("/settings/") ? "bg-[#e8faf0] text-[#25D366]" : "text-gray-400"
+                  }`}>
+                    <Settings className="w-[18px] h-[18px]" />
+                  </div>
+                  <span className={`text-[9.5px] font-medium ${
+                    pathname === "/settings" || pathname?.startsWith("/settings/") ? "text-[#25D366]" : "text-gray-400"
+                  }`}>Settings</span>
+                </div>
+              </Link>
+
+              {/* Configuration (Modal) button in mobile */}
               <button
                 onClick={() => setIsModalOpen(true)}
-                className="flex-1 flex flex-col items-center justify-center gap-0.5 py-1.5"
+                className="flex-1 min-w-[70px] shrink-0 flex flex-col items-center justify-center gap-0.5 py-1.5"
               >
                 <div className="w-9 h-9 rounded-xl flex items-center justify-center text-gray-400">
-                  <Settings className="w-[18px] h-[18px]" />
+                  <Link2 className="w-[18px] h-[18px]" />
                 </div>
-                <span className="text-[9.5px] font-medium text-gray-400">Settings</span>
+                <span className="text-[9.5px] font-medium text-gray-400">Config</span>
               </button>
             </>
           ) : (
-            <div className="flex items-center justify-center w-full gap-3 py-2">
+            <div className="flex items-center justify-center w-full gap-3 py-2 min-w-full">
               <div className="w-8 h-8 bg-red-50 text-red-400 rounded-lg flex items-center justify-center border border-red-100">
                 <AlertCircle className="w-4 h-4" />
               </div>
