@@ -267,7 +267,6 @@ async function handleIncomingMessage(phoneId: string, message: any, contacts: an
     // Agar AI bot ON nahi hai, tabhi flow engine chalega
     if (!settings?.isAiBotActive) {
       
-      // 👇 NAYA CODE: Pehle is phoneId ka userId pta karte hain
       let userId = null;
       const userSnapshot = await db.ref("users").orderByChild("config/phoneId").equalTo(phoneId).once("value");
       
@@ -276,14 +275,15 @@ async function handleIncomingMessage(phoneId: string, message: any, contacts: an
       }
 
       if (userId) {
-        // 👇 TUMHARA PATH: Yahan se flow data fetch ho raha hai
         const flowRef = db.ref(`users/${userId}/chatFlows/main_flow`);
         const flowSnap = await flowRef.once("value");
         const flowData = flowSnap.val();
         
         console.log(`✅ Flow Path Matched: users/${userId}/chatFlows/main_flow`);
         
-        let payload = null;
+        // 👇 YAHI THA ERROR WALA HISA: 'any' add kar diya hai
+        let payload: any = null;
+
         if (interactive?.type === "button_reply") {
           payload = { type: "button_reply", value: interactive.id };
         } else if (interactive?.type === "list_reply") {
