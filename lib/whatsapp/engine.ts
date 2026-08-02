@@ -1,5 +1,5 @@
 // lib/whatsapp/engine.ts
-import { db } from "@/prisma/lib/db"; // your Prisma client singleton
+import * as admin from "firebase-admin";
 import type { WhatsAppNode, WhatsAppNodeData } from "@/store/useChatbotStore";
 import type { Edge } from "@xyflow/react";
 import { sendWhatsAppMessage } from "./sender";
@@ -12,6 +12,21 @@ interface FlowGraph {
 interface IncomingSignal {
   type: "text" | "button_reply" | "list_reply" | "start";
   value: string; // text body, OR button/list reply id
+}
+
+// ─── Safely Initialize & Get Firebase DB ───
+function getFirebaseDb() {
+  if (!admin.apps.length) {
+    admin.initializeApp({
+      credential: admin.credential.cert({
+        projectId: process.env.FIREBASE_PROJECT_ID,
+        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+        privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
+      }),
+      databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL,
+    });
+  }
+  return admin.database();
 }
 
 // ─── 1. Find the entry node: the one node nobody points TO ───
@@ -114,14 +129,21 @@ export async function runFlowEngine(
     edges: flowData.edges as Edge[]
   };
 
-  const contact = await db.contact.findUnique({ where: { phoneNumber: from } });
+  const db = getFirebaseDb();
+  const infoRef = db.ref(`chats/${phoneId}/${from}/info`);
+  
+  // 3. User ki current flow position Firebase RTDB se nikalo
+  const infoSnap = await infoRef.once("value");
+  const contactData = infoSnap.exists() ? infoSnap.val() : {};
+  const activeFlowNodeId = contactData.activeFlowNodeId || null;
+
   let currentNode: WhatsAppNode | null = null;
 
-  if (!contact?.activeFlowNodeId) {
+  if (!activeFlowNodeId) {
     // Fresh conversation — start at entry node regardless of what they typed
     currentNode = findEntryNode(graph);
   } else {
-    const cursor = graph.nodes.find((n) => n.id === contact.activeFlowNodeId) ?? null;
+    const cursor = graph.nodes.find((n) => n.id === activeFlowNodeId) ?? null;
     if (cursor) {
       const edge = resolveNextEdge(cursor, signal, graph);
       currentNode = edge ? graph.nodes.find((n) => n.id === edge.target) ?? null : null;
@@ -132,10 +154,10 @@ export async function runFlowEngine(
   while (currentNode) {
     const paused = await renderNode(currentNode, phoneId, from);
 
-    await db.contact.upsert({
-      where: { phoneNumber: from },
-      update: { activeFlowNodeId: paused ? currentNode.id : null },
-      create: { phoneNumber: from, activeFlowNodeId: paused ? currentNode.id : null },
+    // 4. Update the user's position in Firebase RTDB (Removed Prisma Upsert)
+    await infoRef.update({
+      activeFlowNodeId: paused ? currentNode.id : null,
+      updatedAt: Date.now()
     });
 
     if (paused) return; // stop and wait for the next inbound message
