@@ -30,7 +30,6 @@ export default function DevelopersPage() {
   const [testPhones, setTestPhones] = useState<{ [key: string]: string }>({});
   const [sendingStatus, setSendingStatus] = useState<{ [key: string]: boolean }>({});
 
-  // 👇 UPDATE: Webhook URL को हटाकर नया Trigger API URL लगा दिया है
   const apiUrl = "https://superkey-app.vercel.app/api/v1/trigger";
 
   useEffect(() => {
@@ -102,6 +101,7 @@ export default function DevelopersPage() {
     setVisibleKeys((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
+  // 👇 UPDATE: Generate API updated for Fast Index Mapping
   const generateNewApi = async () => {
     if (!selectedTemplate || !auth.currentUser) return;
     
@@ -114,18 +114,35 @@ export default function DevelopersPage() {
     };
 
     try {
-      const newListRef = push(ref(database, `users/${auth.currentUser.uid}/apiKeys`));
+      const userId = auth.currentUser.uid;
+      
+      // 1. Save in user's profile
+      const newListRef = push(ref(database, `users/${userId}/apiKeys`));
+      const keyId = newListRef.key;
       await set(newListRef, apiData);
+
+      // 2. Save in root apiKeysMap for blazing fast backend lookup
+      await set(ref(database, `apiKeysMap/${newKey}`), {
+        uid: userId,
+        keyId: keyId
+      });
+
       alert("New API Key Generated Successfully!");
     } catch (error) {
       alert("Failed to save API Key");
     }
   };
 
-  const deleteApi = async (id: string) => {
+  // 👇 UPDATE: Cleanup mapping when API key is revoked
+  const deleteApi = async (id: string, apiKey: string) => {
     if (!auth.currentUser) return;
     if(confirm("Are you sure you want to revoke this API Key? Any app using it will stop working.")){
-      await remove(ref(database, `users/${auth.currentUser.uid}/apiKeys/${id}`));
+      try {
+        await remove(ref(database, `users/${auth.currentUser.uid}/apiKeys/${id}`));
+        await remove(ref(database, `apiKeysMap/${apiKey}`));
+      } catch (error) {
+        alert("Failed to revoke API Key");
+      }
     }
   };
 
@@ -211,7 +228,6 @@ export default function DevelopersPage() {
 
         <div className="p-6 max-w-5xl mx-auto w-full flex-1 flex flex-col gap-6">
           
-          {/* 👇 UPDATE: यहाँ Card को Trigger API Endpoint के लिए बदल दिया गया है */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
             <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2 mb-2">
               <Zap className="w-5 h-5 text-[#00A884]" /> BaseKey Trigger API Endpoint
@@ -282,7 +298,8 @@ export default function DevelopersPage() {
                       <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-1">Target Template</p>
                       <p className="font-bold text-gray-900">{api.templateName}</p>
                     </div>
-                    <button onClick={() => deleteApi(api.id)} className="text-xs text-red-500 hover:bg-red-50 border border-transparent hover:border-red-100 px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1.5 transition">
+                    {/* 👇 UPDATE: Pass the API Key to the delete function */}
+                    <button onClick={() => deleteApi(api.id, api.apiKey)} className="text-xs text-red-500 hover:bg-red-50 border border-transparent hover:border-red-100 px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1.5 transition">
                       <Trash2 className="w-4 h-4" /> Revoke API
                     </button>
                   </div>
