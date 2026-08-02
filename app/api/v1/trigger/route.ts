@@ -5,12 +5,10 @@ import admin from "firebase-admin";
 
 // 1. Firebase Admin SDK Initialization (Server-side के लिए)
 if (!getApps().length) {
-  // ध्यान रहे: Vercel के Environment Variables में ये तीन keys डालनी होंगी
   initializeApp({
     credential: admin.credential.cert({
       projectId: process.env.FIREBASE_PROJECT_ID,
       clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      // प्राइवेट की में \n का इश्यू आता है इसलिए replace करते हैं
       privateKey: process.env.FIREBASE_SERVICE_ACCOUNT_KEY?.replace(/\\n/g, '\n'),
     }),
     databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL,
@@ -31,9 +29,9 @@ export async function POST(req: Request) {
     }
     const clientApiKey = authHeader.replace("Bearer ", "").trim();
 
-    // 3. Request Body से डेटा निकालना
+    // 3. Request Body से डेटा निकालना (language भी अब dynamic कर दिया है)
     const body = await req.json();
-    const { template, phone, variables } = body;
+    const { template, phone, variables, language } = body;
 
     if (!template || !phone) {
       return NextResponse.json(
@@ -54,7 +52,6 @@ export async function POST(req: Request) {
       for (const uid of Object.keys(usersData)) {
         const apiKeysObj = usersData[uid]?.apiKeys;
         if (apiKeysObj) {
-          // चेक कर रहे हैं कि क्या किसी भी key की वैल्यू clientApiKey से मैच होती है
           const foundKeyEntry = Object.values(apiKeysObj).find(
             (item: any) => item.apiKey === clientApiKey
           );
@@ -101,7 +98,7 @@ export async function POST(req: Request) {
         type: "template",
         template: {
           name: template,
-          language: { code: "en_US" }, // अगर तुम्हारा टेम्प्लेट किसी और भाषा में है तो यहाँ बदल सकते हो
+          language: { code: language || "en_US" },
           ...(components.length > 0 && { components }),
         },
       }),
