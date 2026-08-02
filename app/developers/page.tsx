@@ -22,7 +22,9 @@ export default function DevelopersPage() {
   const [wabaId, setWabaId] = useState<string>("");
   const [accessToken, setAccessToken] = useState<string>("");
   const [phoneId, setPhoneId] = useState<string>("");
-  const [availableTemplates, setAvailableTemplates] = useState<string[]>([]);
+  
+  // 👇 UPDATE: अब हम सिर्फ नाम नहीं, बल्कि पूरा टेम्प्लेट ऑब्जेक्ट सेव करेंगे
+  const [availableTemplates, setAvailableTemplates] = useState<any[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState("");
   const [savedApis, setSavedApis] = useState<SavedAPI[]>([]);
   
@@ -32,7 +34,6 @@ export default function DevelopersPage() {
 
   const webhookUrl = "https://superkey-app.vercel.app/api/webhook/whatsapp";
 
-  // 1. Firebase से User Config और Saved APIs लोड करना
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
@@ -65,7 +66,6 @@ export default function DevelopersPage() {
     return () => unsubscribe();
   }, []);
 
-  // 2. Meta से असली Templates मंगाना
   const fetchTemplatesFromMeta = async (waba: string, token: string) => {
     try {
       const response = await fetch(`https://graph.facebook.com/v21.0/${waba}/message_templates`, {
@@ -73,14 +73,18 @@ export default function DevelopersPage() {
       });
       const result = await response.json();
       if (result.data) {
-        const approved = result.data
-          .filter((t: any) => t.status === "APPROVED")
-          .map((t: any) => t.name);
+        const approved = result.data.filter((t: any) => t.status === "APPROVED");
         
-        const uniqueTemplates = Array.from(new Set(approved)) as string[];
+        // डुप्लीकेट नाम हटाना लेकिन पूरा ऑब्जेक्ट रखना
+        const uniqueTemplatesMap = new Map();
+        approved.forEach((t: any) => {
+           if(!uniqueTemplatesMap.has(t.name)) uniqueTemplatesMap.set(t.name, t);
+        });
+        const uniqueTemplates = Array.from(uniqueTemplatesMap.values());
+        
         setAvailableTemplates(uniqueTemplates);
         if (uniqueTemplates.length > 0) {
-          setSelectedTemplate(uniqueTemplates[0]);
+          setSelectedTemplate(uniqueTemplates[0].name);
         }
       }
     } catch (error) {
@@ -100,7 +104,6 @@ export default function DevelopersPage() {
     setVisibleKeys((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
-  // 3. नया API Key जनरेट करके Firebase में Save करना
   const generateNewApi = async () => {
     if (!selectedTemplate || !auth.currentUser) return;
     
@@ -121,7 +124,6 @@ export default function DevelopersPage() {
     }
   };
 
-  // 4. API Key को Firebase से Delete करना
   const deleteApi = async (id: string) => {
     if (!auth.currentUser) return;
     if(confirm("Are you sure you want to revoke this API Key? Any app using it will stop working.")){
@@ -129,7 +131,18 @@ export default function DevelopersPage() {
     }
   };
 
-  // 5. Live Test Message भेजना (सीधे Meta Graph API से)
+  // 👇 UPDATE: Dynamic Variables Helper
+  const getDummyVariables = (tplName: string) => {
+    const tplDef = availableTemplates.find(t => t.name === tplName);
+    if (!tplDef || !tplDef.components) return [];
+    
+    const bodyComp = tplDef.components.find((c: any) => c.type === "BODY");
+    if (!bodyComp || !bodyComp.text) return [];
+    
+    const matches = bodyComp.text.match(/\{\{\d+\}\}/g);
+    return matches ? matches.map((_: any, i: number) => `TestVal_${i+1}`) : [];
+  };
+
   const handleTestSend = async (api: SavedAPI) => {
     const phone = testPhones[api.id];
     if (!phone) {
@@ -138,6 +151,18 @@ export default function DevelopersPage() {
     }
 
     setSendingStatus({ ...sendingStatus, [api.id]: true });
+
+    // डायनामिक कम्पोनेंट्स बनाना
+    const tplDef = availableTemplates.find(t => t.name === api.templateName);
+    let dynamicComponents: any[] = [];
+    
+    const dummyVars = getDummyVariables(api.templateName);
+    if (dummyVars.length > 0) {
+       dynamicComponents.push({
+         type: "body",
+         parameters: dummyVars.map(val => ({ type: "text", text: val }))
+       });
+    }
 
     try {
       const response = await fetch(`https://graph.facebook.com/v21.0/${phoneId}/messages`, {
@@ -152,17 +177,9 @@ export default function DevelopersPage() {
           type: "template",
           template: {
             name: api.templateName,
-            language: { code: "en_US" }, 
-            // 👇 (#132000) Error Fix: Testing के लिए डमी वेरिएबल्स पास कर रहे हैं
-            components: [
-              {
-                type: "body",
-                parameters: [
-                  { type: "text", text: "Success" }, // {{1}} की जगह
-                  { type: "text", text: "v1.2.0" }   // {{2}} की जगह (अगर हो तो)
-                ]
-              }
-            ]
+            language: { code: tplDef ? tplDef.language : "en_US" },
+            // अगर वेरिएबल्स हैं, तभी components ऐरे भेजेंगे
+            ...(dynamicComponents.length > 0 && { components: dynamicComponents })
           }
         })
       });
@@ -213,7 +230,6 @@ export default function DevelopersPage() {
             </div>
           </div>
 
-          {/* Generator Section */}
           <div className="bg-[#00A884]/5 rounded-2xl border border-[#00A884]/20 p-6 flex flex-col md:flex-row gap-4 items-end">
             <div className="flex-1 w-full">
               <label className="text-sm font-bold text-gray-700 flex items-center gap-2 mb-2">
@@ -229,8 +245,9 @@ export default function DevelopersPage() {
                   onChange={(e) => setSelectedTemplate(e.target.value)}
                   className="w-full bg-white border border-gray-200 text-gray-800 text-sm rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-[#00A884]/20 focus:border-[#00A884] shadow-sm font-medium"
                 >
+                  {/* UPDATE: Object से नाम निकाल रहे हैं */}
                   {availableTemplates.map(tpl => (
-                    <option key={tpl} value={tpl}>{tpl}</option>
+                    <option key={tpl.name} value={tpl.name}>{tpl.name}</option>
                   ))}
                 </select>
               )}
@@ -244,7 +261,6 @@ export default function DevelopersPage() {
             </button>
           </div>
 
-          {/* List of Active APIs */}
           <div className="space-y-4">
             <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
               <Database className="w-5 h-5 text-[#00A884]" /> Active API Keys
@@ -260,8 +276,9 @@ export default function DevelopersPage() {
               </div>
             ) : (
               savedApis.map((api) => {
-                // 👇 यहाँ पर Live Phone Number लिया जा रहा है, अगर खाली है तो Placeholder दिखेगा
                 const currentPhone = testPhones[api.id] || "919876543210";
+                // 👇 UPDATE: इस टेम्प्लेट के लिए कितने वेरिएबल चाहिए, वो यहाँ से निकाल रहे हैं
+                const requiredVars = getDummyVariables(api.templateName);
                 
                 return (
                 <div key={api.id} className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
@@ -278,7 +295,6 @@ export default function DevelopersPage() {
 
                   <div className="p-6 space-y-5">
                     
-                    {/* API Key Field */}
                     <div>
                       <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 block">API Key (Keep Secret)</label>
                       <div className="flex items-center gap-3 bg-gray-50 p-2.5 rounded-xl border border-gray-200">
@@ -299,7 +315,6 @@ export default function DevelopersPage() {
                       </div>
                     </div>
 
-                    {/* LIVE TEST SECTION */}
                     <div className="bg-[#E8F8F5] border border-[#A7E9D1] rounded-xl p-4">
                       <h3 className="text-sm font-bold text-[#075E54] mb-2 flex items-center gap-1.5">
                         <Send className="w-4 h-4" /> Live Test this API
@@ -325,7 +340,6 @@ export default function DevelopersPage() {
                       </p>
                     </div>
 
-                    {/* cURL Example (Dynamic Number Binded) */}
                     <div>
                       <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                         <Terminal className="w-4 h-4" /> cURL Request for your Backend
@@ -338,11 +352,11 @@ export default function DevelopersPage() {
   -d '{
     "template": "${api.templateName}",
     "phone": "${currentPhone}",
-    "variables": ["Success", "v1.2.0"]
+    "variables": ${JSON.stringify(requiredVars)}
   }'`}
                         </pre>
                         <button 
-                          onClick={() => handleCopy(`curl -X POST https://superkey-app.vercel.app/api/v1/trigger -H "Authorization: Bearer ${api.apiKey}" -H "Content-Type: application/json" -d '{"template": "${api.templateName}", "phone": "${currentPhone}", "variables": ["Success", "v1.2.0"]}'`, `curl-${api.id}`)}
+                          onClick={() => handleCopy(`curl -X POST https://superkey-app.vercel.app/api/v1/trigger -H "Authorization: Bearer ${api.apiKey}" -H "Content-Type: application/json" -d '{"template": "${api.templateName}", "phone": "${currentPhone}", "variables": ${JSON.stringify(requiredVars)}}'`, `curl-${api.id}`)}
                           className="absolute top-3 right-3 bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-lg text-xs font-semibold backdrop-blur-sm transition"
                         >
                           {copiedStates[`curl-${api.id}`] ? "Copied!" : "Copy Code"}
