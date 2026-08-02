@@ -1,28 +1,97 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Sidebar from "@/components/Sidebar"; 
-import { Code2, Key, Webhook, Copy, Check, Terminal, Eye, EyeOff, Plus, FileText, Database } from "lucide-react";
+import { Code2, Key, Webhook, Copy, Check, Terminal, Eye, EyeOff, Plus, FileText, Database, Send, Trash2, Loader2 } from "lucide-react";
+import { auth, database } from "@/lib/firebase"; // अपने firebase.ts का सही पाथ चेक कर लेना
+import { onAuthStateChanged } from "firebase/auth";
+import { ref, onValue, set, push, remove } from "firebase/database";
 
-// API का टाइप डिफ़ाइन कर रहे हैं
 interface SavedAPI {
   id: string;
   templateName: string;
   apiKey: string;
-  createdAt: Date;
+  createdAt: number;
 }
 
 export default function DevelopersPage() {
   const [copiedStates, setCopiedStates] = useState<{ [key: string]: boolean }>({});
   const [visibleKeys, setVisibleKeys] = useState<{ [key: string]: boolean }>({});
   
-  // डमी टेम्प्लेट्स (इसे तुम बाद में Firebase से फैच कर सकते हो)
-  const availableTemplates = ["hello_world", "apk_build_status", "order_confirmation", "otp_verification"];
-  
-  const [selectedTemplate, setSelectedTemplate] = useState(availableTemplates[0]);
+  // Real Data States
+  const [wabaId, setWabaId] = useState<string>("");
+  const [accessToken, setAccessToken] = useState<string>("");
+  const [phoneId, setPhoneId] = useState<string>("");
+  const [availableTemplates, setAvailableTemplates] = useState<string[]>([]);
+  const [selectedTemplate, setSelectedTemplate] = useState("");
   const [savedApis, setSavedApis] = useState<SavedAPI[]>([]);
+  
+  const [loading, setLoading] = useState(true);
+  const [testPhones, setTestPhones] = useState<{ [key: string]: string }>({});
+  const [sendingStatus, setSendingStatus] = useState<{ [key: string]: boolean }>({});
 
   const webhookUrl = "https://superkey-app.vercel.app/api/webhook/whatsapp";
+
+  // 1. Firebase से User Config और Saved APIs लोड करना
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        // Config लाना (Tokens)
+        const configRef = ref(database, `users/${user.uid}/config`);
+        onValue(configRef, (snapshot) => {
+          if (snapshot.exists()) {
+            const data = snapshot.val();
+            setWabaId(data.wabaId);
+            setAccessToken(data.accessToken);
+            setPhoneId(data.phoneId);
+            fetchTemplatesFromMeta(data.wabaId, data.accessToken);
+          }
+        });
+
+        // Saved APIs लाना
+        const apiRef = ref(database, `users/${user.uid}/apiKeys`);
+        onValue(apiRef, (snapshot) => {
+          if (snapshot.exists()) {
+            const apisArray: SavedAPI[] = [];
+            snapshot.forEach((child) => {
+              apisArray.push({ id: child.key, ...child.val() });
+            });
+            // सबसे नई API ऊपर दिखाने के लिए reverse
+            setSavedApis(apisArray.reverse());
+          } else {
+            setSavedApis([]);
+          }
+          setLoading(false);
+        });
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // 2. Meta से असली Templates मंगाना
+  const fetchTemplatesFromMeta = async (waba: string, token: string) => {
+    try {
+      const response = await fetch(`https://graph.facebook.com/v21.0/${waba}/message_templates`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const result = await response.json();
+      if (result.data) {
+        // सिर्फ Approved टेम्प्लेट्स निकालेंगे
+        const approved = result.data
+          .filter((t: any) => t.status === "APPROVED")
+          .map((t: any) => t.name);
+        
+        // डुप्लीकेट नाम हटाना (क्योकि अलग-अलग भाषाओँ में एक ही नाम हो सकता है)
+        const uniqueTemplates = Array.from(new Set(approved)) as string[];
+        setAvailableTemplates(uniqueTemplates);
+        if (uniqueTemplates.length > 0) {
+          setSelectedTemplate(uniqueTemplates[0]);
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching templates:", error);
+    }
+  };
 
   const handleCopy = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
@@ -36,42 +105,83 @@ export default function DevelopersPage() {
     setVisibleKeys((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const generateNewApi = () => {
-    if (!selectedTemplate) return;
+  // 3. नया API Key जनरेट करके Firebase में Save करना
+  const generateNewApi = async () => {
+    if (!selectedTemplate || !auth.currentUser) return;
     
-    // नया रैंडम API Key जनरेट कर रहे हैं
     const newKey = "bk_live_" + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
     
-    const newApi: SavedAPI = {
-      id: Math.random().toString(36).substring(2, 9),
+    const apiData = {
       templateName: selectedTemplate,
       apiKey: newKey,
-      createdAt: new Date(),
+      createdAt: Date.now(),
     };
 
-    // नए API को लिस्ट में सबसे ऊपर जोड़ रहे हैं
-    setSavedApis([newApi, ...savedApis]);
-    
-    // TODO: यहाँ तुम Firebase में भी इसे सेव कर सकते हो
-    // set(ref(database, `users/{uid}/apiKeys/{newApi.id}`), newApi);
+    try {
+      const newListRef = push(ref(database, `users/${auth.currentUser.uid}/apiKeys`));
+      await set(newListRef, apiData);
+      alert("New API Key Generated Successfully!");
+    } catch (error) {
+      alert("Failed to save API Key");
+    }
   };
 
-  const deleteApi = (id: string) => {
-    setSavedApis(savedApis.filter(api => api.id !== id));
+  // 4. API Key को Firebase से Delete करना
+  const deleteApi = async (id: string) => {
+    if (!auth.currentUser) return;
+    if(confirm("Are you sure you want to revoke this API Key? Any app using it will stop working.")){
+      await remove(ref(database, `users/${auth.currentUser.uid}/apiKeys/${id}`));
+    }
+  };
+
+  // 5. Live Test Message भेजना (सीधे Meta Graph API से)
+  const handleTestSend = async (api: SavedAPI) => {
+    const phone = testPhones[api.id];
+    if (!phone) {
+      alert("Please enter a phone number to test.");
+      return;
+    }
+
+    setSendingStatus({ ...sendingStatus, [api.id]: true });
+
+    try {
+      const response = await fetch(`https://graph.facebook.com/v21.0/${phoneId}/messages`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${accessToken}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          messaging_product: "whatsapp",
+          to: phone,
+          type: "template",
+          template: {
+            name: api.templateName,
+            language: { code: "en_US" } // Defaulting to English. Adjust if your templates are in hi_IN
+          }
+        })
+      });
+
+      const data = await response.json();
+      if (data.error) {
+        alert("Meta Error: " + data.error.message);
+      } else {
+        alert("Success! Check your WhatsApp.");
+      }
+    } catch (error) {
+      alert("Failed to send test message.");
+    } finally {
+      setSendingStatus({ ...sendingStatus, [api.id]: false });
+    }
   };
 
   return (
     <div className="flex h-[100dvh] w-full bg-[#F5F7F9] overflow-hidden pb-[70px] md:pb-0 font-sans text-gray-900 relative">
-      
-      {/* ─── Sidebar Navigation ─── */}
       <div className="shrink-0 z-50">
         <Sidebar />
       </div>
 
-      {/* ─── Main Content Area ─── */}
       <div className="flex-1 flex flex-col h-full relative overflow-y-auto">
-        
-        {/* Header */}
         <div className="bg-white border-b border-gray-200 px-6 py-5 sticky top-0 z-10 flex justify-between items-center">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
@@ -82,16 +192,13 @@ export default function DevelopersPage() {
           </div>
         </div>
 
-        {/* Main Content */}
         <div className="p-6 max-w-5xl mx-auto w-full flex-1 flex flex-col gap-6">
           
-          {/* Webhook Configuration (Global) */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
             <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2 mb-2">
               <Webhook className="w-5 h-5 text-[#00A884]" /> Global Webhook URL
             </h2>
             <p className="text-sm text-gray-500 mb-4">Configure this in Meta Dashboard to receive real-time messages.</p>
-            
             <div className="flex items-center gap-3 bg-gray-50 p-3 rounded-xl border border-gray-200">
               <input type="text" readOnly value={webhookUrl} className="bg-transparent font-mono text-sm flex-1 text-gray-700 outline-none" />
               <button onClick={() => handleCopy(webhookUrl, "webhook")} className="bg-white border border-gray-200 hover:bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition">
@@ -101,37 +208,48 @@ export default function DevelopersPage() {
             </div>
           </div>
 
-          {/* Generate New Template API */}
+          {/* Generator Section */}
           <div className="bg-[#00A884]/5 rounded-2xl border border-[#00A884]/20 p-6 flex flex-col md:flex-row gap-4 items-end">
             <div className="flex-1 w-full">
               <label className="text-sm font-bold text-gray-700 flex items-center gap-2 mb-2">
                 <FileText className="w-4 h-4 text-[#00A884]" /> Select Template to Generate API
               </label>
-              <select 
-                value={selectedTemplate}
-                onChange={(e) => setSelectedTemplate(e.target.value)}
-                className="w-full bg-white border border-gray-200 text-gray-800 text-sm rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-[#00A884]/20 focus:border-[#00A884] shadow-sm"
-              >
-                {availableTemplates.map(tpl => (
-                  <option key={tpl} value={tpl}>{tpl}</option>
-                ))}
-              </select>
+              {availableTemplates.length === 0 ? (
+                <div className="bg-white border border-gray-200 text-gray-400 text-sm rounded-xl px-4 py-3">
+                  {loading ? "Loading templates from Meta..." : "No approved templates found."}
+                </div>
+              ) : (
+                <select 
+                  value={selectedTemplate}
+                  onChange={(e) => setSelectedTemplate(e.target.value)}
+                  className="w-full bg-white border border-gray-200 text-gray-800 text-sm rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-[#00A884]/20 focus:border-[#00A884] shadow-sm font-medium"
+                >
+                  {availableTemplates.map(tpl => (
+                    <option key={tpl} value={tpl}>{tpl}</option>
+                  ))}
+                </select>
+              )}
             </div>
             <button 
               onClick={generateNewApi}
-              className="w-full md:w-auto bg-[#00A884] hover:bg-[#009172] text-white px-6 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-sm transition-all active:scale-95"
+              disabled={availableTemplates.length === 0}
+              className="w-full md:w-auto bg-[#00A884] hover:bg-[#009172] text-white px-6 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-sm transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Plus className="w-5 h-5" /> Generate API Key
             </button>
           </div>
 
-          {/* Saved APIs List */}
+          {/* List of Active APIs */}
           <div className="space-y-4">
             <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
               <Database className="w-5 h-5 text-[#00A884]" /> Active API Keys
             </h2>
             
-            {savedApis.length === 0 ? (
+            {loading ? (
+              <div className="flex justify-center items-center p-10">
+                <Loader2 className="w-8 h-8 animate-spin text-[#00A884]" />
+              </div>
+            ) : savedApis.length === 0 ? (
               <div className="bg-white border border-dashed border-gray-300 rounded-2xl p-10 text-center text-gray-500">
                 Generate an API key above to see it here.
               </div>
@@ -144,13 +262,14 @@ export default function DevelopersPage() {
                       <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-1">Target Template</p>
                       <p className="font-bold text-gray-900">{api.templateName}</p>
                     </div>
-                    <button onClick={() => deleteApi(api.id)} className="text-xs text-red-500 hover:bg-red-50 px-3 py-1.5 rounded-lg font-semibold transition">
-                      Revoke API
+                    <button onClick={() => deleteApi(api.id)} className="text-xs text-red-500 hover:bg-red-50 border border-transparent hover:border-red-100 px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1.5 transition">
+                      <Trash2 className="w-4 h-4" /> Revoke API
                     </button>
                   </div>
 
                   <div className="p-6 space-y-5">
-                    {/* API Key Field with Masking */}
+                    
+                    {/* API Key Field */}
                     <div>
                       <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 block">API Key (Keep Secret)</label>
                       <div className="flex items-center gap-3 bg-gray-50 p-2.5 rounded-xl border border-gray-200">
@@ -171,10 +290,36 @@ export default function DevelopersPage() {
                       </div>
                     </div>
 
+                    {/* LIVE TEST SECTION */}
+                    <div className="bg-[#E8F8F5] border border-[#A7E9D1] rounded-xl p-4">
+                      <h3 className="text-sm font-bold text-[#075E54] mb-2 flex items-center gap-1.5">
+                        <Send className="w-4 h-4" /> Live Test this API
+                      </h3>
+                      <div className="flex flex-col sm:flex-row gap-3">
+                        <input 
+                          type="text"
+                          placeholder="Phone No. with Country Code (e.g. 917320041415)"
+                          value={testPhones[api.id] || ""}
+                          onChange={(e) => setTestPhones({...testPhones, [api.id]: e.target.value})}
+                          className="flex-1 bg-white border border-[#A7E9D1] text-gray-800 text-sm rounded-lg px-3 py-2.5 outline-none focus:border-[#00A884] shadow-sm"
+                        />
+                        <button 
+                          onClick={() => handleTestSend(api)}
+                          disabled={sendingStatus[api.id]}
+                          className="bg-[#00A884] hover:bg-[#009172] text-white px-5 py-2.5 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-60"
+                        >
+                          {sendingStatus[api.id] ? <Loader2 className="w-4 h-4 animate-spin" /> : "Send Test"}
+                        </button>
+                      </div>
+                      <p className="text-[11px] text-[#075E54]/70 mt-2">
+                        * Note: If your Meta App is in Development Mode, you can only send tests to verified numbers.
+                      </p>
+                    </div>
+
                     {/* cURL Example */}
                     <div>
                       <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                        <Terminal className="w-4 h-4" /> Example cURL Request
+                        <Terminal className="w-4 h-4" /> cURL Request for your Backend
                       </label>
                       <div className="relative group">
                         <pre className="bg-gray-900 text-green-400 p-4 rounded-xl text-xs font-mono overflow-x-auto whitespace-pre-wrap leading-relaxed">
@@ -184,7 +329,7 @@ export default function DevelopersPage() {
   -d '{
     "template": "${api.templateName}",
     "phone": "919876543210",
-    "variables": ["var1", "var2"]
+    "variables": []
   }'`}
                         </pre>
                         <button 
