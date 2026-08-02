@@ -1,19 +1,24 @@
 import { NextResponse } from "next/server";
 import * as admin from "firebase-admin";
 import { runFlowEngine } from "@/lib/whatsapp/engine";
-// 👇 NAYA CODE: Prisma ko import kiya aur uska nick-name 'prisma' rakh diya
+// Prisma ko import kiya aur uska nick-name 'prisma' rakh diya
 import { db as prisma } from "@/prisma/lib/db"; 
 
-// ─── Initialize Firebase Admin ───
+// ─── Initialize Firebase Admin (Updated with Individual Keys) ───
 if (!admin.apps.length) {
   try {
-    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY as string);
     admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount),
+      credential: admin.credential.cert({
+        projectId: process.env.FIREBASE_PROJECT_ID,
+        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+        // \n ko theek se parse karne ke liye replace() zaroori hai
+        privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
+      }),
       databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL,
     });
+    console.log("✅ Firebase Admin Initialized Successfully");
   } catch (error) {
-    console.error("Firebase Admin Initialization Error:", error);
+    console.error("❌ Firebase Admin Initialization Error:", error);
   }
 }
 
@@ -256,28 +261,52 @@ async function handleIncomingMessage(phoneId: string, message: any, contacts: an
 
   // ─── 🔌 D. HAND OFF TO THE FLOW ENGINE ───
   try {
-    // 👇 NAYA CODE: Check if AI Bot is active using Prisma
+    // Check if AI Bot is active using Prisma
     const settings = await prisma.systemSettings.findUnique({ where: { id: "main_settings" } });
 
     // Agar AI bot ON nahi hai, tabhi flow engine chalega
     if (!settings?.isAiBotActive) {
-      if (interactive?.type === "button_reply") {
-        await runFlowEngine(phoneId, senderPhone, { type: "button_reply", value: interactive.id });
-      } else if (interactive?.type === "list_reply") {
-        await runFlowEngine(phoneId, senderPhone, { type: "list_reply", value: interactive.id });
-      } else if (button?.payload) {
-        // Older template quick-reply buttons come through as message.button, not message.interactive
-        await runFlowEngine(phoneId, senderPhone, { type: "button_reply", value: button.payload });
-      } else if (messageType === "text") {
-        await runFlowEngine(phoneId, senderPhone, { type: "text", value: text });
+      
+      // 👇 NAYA CODE: Pehle is phoneId ka userId pta karte hain
+      let userId = null;
+      const userSnapshot = await db.ref("users").orderByChild("config/phoneId").equalTo(phoneId).once("value");
+      
+      if (userSnapshot.exists()) {
+        userId = Object.keys(userSnapshot.val())[0]; // Jo pehla user milega wahi owner hai
       }
+
+      if (userId) {
+        // 👇 TUMHARA PATH: Yahan se flow data fetch ho raha hai
+        const flowRef = db.ref(`users/${userId}/chatFlows/main_flow`);
+        const flowSnap = await flowRef.once("value");
+        const flowData = flowSnap.val();
+        
+        console.log(`✅ Flow Path Matched: users/${userId}/chatFlows/main_flow`);
+        
+        let payload = null;
+        if (interactive?.type === "button_reply") {
+          payload = { type: "button_reply", value: interactive.id };
+        } else if (interactive?.type === "list_reply") {
+          payload = { type: "list_reply", value: interactive.id };
+        } else if (button?.payload) {
+          payload = { type: "button_reply", value: button.payload };
+        } else if (messageType === "text") {
+          payload = { type: "text", value: text };
+        }
+
+        if (payload) {
+          // Ab flowData aur userId ko bhi engine me pass kar rahe hain
+          await runFlowEngine(phoneId, senderPhone, payload, userId, flowData);
+        }
+      } else {
+        console.warn(`⚠️ Flow Cancelled: Database me phoneId ${phoneId} ke liye koi user nahi mila.`);
+      }
+
     } else {
       console.log(`🤖 AI Bot is active. Skipping visual Flow Engine for ${senderPhone}.`);
       // Future me Gemini AI ka code yahan aayega
     }
   } catch (engineError) {
-    // Flow engine failing should NEVER break webhook ack — Meta doesn't care about your bot logic,
-    // it just wants 200 back. Log it and move on.
     console.error("Flow engine error:", engineError);
   }
 }
