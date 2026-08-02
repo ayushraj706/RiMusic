@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Sidebar from "@/components/Sidebar"; 
 import { Code2, Key, Webhook, Copy, Check, Terminal, Eye, EyeOff, Plus, FileText, Database, Send, Trash2, Loader2 } from "lucide-react";
-import { auth, database } from "@/lib/firebase"; // अपने firebase.ts का सही पाथ चेक कर लेना
+import { auth, database } from "@/lib/firebase"; 
 import { onAuthStateChanged } from "firebase/auth";
 import { ref, onValue, set, push, remove } from "firebase/database";
 
@@ -36,7 +36,6 @@ export default function DevelopersPage() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
-        // Config लाना (Tokens)
         const configRef = ref(database, `users/${user.uid}/config`);
         onValue(configRef, (snapshot) => {
           if (snapshot.exists()) {
@@ -48,7 +47,6 @@ export default function DevelopersPage() {
           }
         });
 
-        // Saved APIs लाना
         const apiRef = ref(database, `users/${user.uid}/apiKeys`);
         onValue(apiRef, (snapshot) => {
           if (snapshot.exists()) {
@@ -56,7 +54,6 @@ export default function DevelopersPage() {
             snapshot.forEach((child) => {
               apisArray.push({ id: child.key, ...child.val() });
             });
-            // सबसे नई API ऊपर दिखाने के लिए reverse
             setSavedApis(apisArray.reverse());
           } else {
             setSavedApis([]);
@@ -76,12 +73,10 @@ export default function DevelopersPage() {
       });
       const result = await response.json();
       if (result.data) {
-        // सिर्फ Approved टेम्प्लेट्स निकालेंगे
         const approved = result.data
           .filter((t: any) => t.status === "APPROVED")
           .map((t: any) => t.name);
         
-        // डुप्लीकेट नाम हटाना (क्योकि अलग-अलग भाषाओँ में एक ही नाम हो सकता है)
         const uniqueTemplates = Array.from(new Set(approved)) as string[];
         setAvailableTemplates(uniqueTemplates);
         if (uniqueTemplates.length > 0) {
@@ -157,7 +152,17 @@ export default function DevelopersPage() {
           type: "template",
           template: {
             name: api.templateName,
-            language: { code: "en_US" } // Defaulting to English. Adjust if your templates are in hi_IN
+            language: { code: "en_US" }, 
+            // 👇 (#132000) Error Fix: Testing के लिए डमी वेरिएबल्स पास कर रहे हैं
+            components: [
+              {
+                type: "body",
+                parameters: [
+                  { type: "text", text: "Success" }, // {{1}} की जगह
+                  { type: "text", text: "v1.2.0" }   // {{2}} की जगह (अगर हो तो)
+                ]
+              }
+            ]
           }
         })
       });
@@ -254,7 +259,11 @@ export default function DevelopersPage() {
                 Generate an API key above to see it here.
               </div>
             ) : (
-              savedApis.map((api) => (
+              savedApis.map((api) => {
+                // 👇 यहाँ पर Live Phone Number लिया जा रहा है, अगर खाली है तो Placeholder दिखेगा
+                const currentPhone = testPhones[api.id] || "919876543210";
+                
+                return (
                 <div key={api.id} className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
                   
                   <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
@@ -316,7 +325,7 @@ export default function DevelopersPage() {
                       </p>
                     </div>
 
-                    {/* cURL Example */}
+                    {/* cURL Example (Dynamic Number Binded) */}
                     <div>
                       <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                         <Terminal className="w-4 h-4" /> cURL Request for your Backend
@@ -328,12 +337,12 @@ export default function DevelopersPage() {
   -H "Content-Type: application/json" \\
   -d '{
     "template": "${api.templateName}",
-    "phone": "919876543210",
-    "variables": []
+    "phone": "${currentPhone}",
+    "variables": ["Success", "v1.2.0"]
   }'`}
                         </pre>
                         <button 
-                          onClick={() => handleCopy(`curl -X POST https://superkey-app.vercel.app/api/v1/trigger -H "Authorization: Bearer ${api.apiKey}" -H "Content-Type: application/json" -d '{"template": "${api.templateName}", "phone": "919876543210", "variables": []}'`, `curl-${api.id}`)}
+                          onClick={() => handleCopy(`curl -X POST https://superkey-app.vercel.app/api/v1/trigger -H "Authorization: Bearer ${api.apiKey}" -H "Content-Type: application/json" -d '{"template": "${api.templateName}", "phone": "${currentPhone}", "variables": ["Success", "v1.2.0"]}'`, `curl-${api.id}`)}
                           className="absolute top-3 right-3 bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-lg text-xs font-semibold backdrop-blur-sm transition"
                         >
                           {copiedStates[`curl-${api.id}`] ? "Copied!" : "Copy Code"}
@@ -343,7 +352,7 @@ export default function DevelopersPage() {
 
                   </div>
                 </div>
-              ))
+              )})
             )}
           </div>
 
