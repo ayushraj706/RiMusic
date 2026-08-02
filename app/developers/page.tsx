@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import Sidebar from "@/components/Sidebar"; 
-import { Code2, Key, Webhook, Copy, Check, Terminal, Eye, EyeOff, Plus, FileText, Database, Send, Trash2, Loader2 } from "lucide-react";
+import { Code2, Key, Webhook, Copy, Check, Terminal, Eye, EyeOff, Plus, FileText, Database, Send, Trash2, Loader2, Zap } from "lucide-react";
 import { auth, database } from "@/lib/firebase"; 
 import { onAuthStateChanged } from "firebase/auth";
 import { ref, onValue, set, push, remove } from "firebase/database";
@@ -30,7 +30,8 @@ export default function DevelopersPage() {
   const [testPhones, setTestPhones] = useState<{ [key: string]: string }>({});
   const [sendingStatus, setSendingStatus] = useState<{ [key: string]: boolean }>({});
 
-  const webhookUrl = "https://superkey-app.vercel.app/api/webhook/whatsapp";
+  // 👇 UPDATE: Webhook URL को हटाकर नया Trigger API URL लगा दिया है
+  const apiUrl = "https://superkey-app.vercel.app/api/v1/trigger";
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -50,7 +51,6 @@ export default function DevelopersPage() {
         onValue(apiRef, (snapshot) => {
           if (snapshot.exists()) {
             const apisArray: SavedAPI[] = [];
-            // Vercel fix: child parameter explicitly typed as any
             snapshot.forEach((child: any) => {
               apisArray.push({ id: child.key, ...child.val() });
             });
@@ -156,7 +156,6 @@ export default function DevelopersPage() {
     if (dummyVars.length > 0) {
        dynamicComponents.push({
          type: "body",
-         // 👇 Vercel fix: (val: string) लगा दिया गया है
          parameters: dummyVars.map((val: string) => ({ type: "text", text: val }))
        });
     }
@@ -212,16 +211,17 @@ export default function DevelopersPage() {
 
         <div className="p-6 max-w-5xl mx-auto w-full flex-1 flex flex-col gap-6">
           
+          {/* 👇 UPDATE: यहाँ Card को Trigger API Endpoint के लिए बदल दिया गया है */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
             <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2 mb-2">
-              <Webhook className="w-5 h-5 text-[#00A884]" /> Global Webhook URL
+              <Zap className="w-5 h-5 text-[#00A884]" /> BaseKey Trigger API Endpoint
             </h2>
-            <p className="text-sm text-gray-500 mb-4">Configure this in Meta Dashboard to receive real-time messages.</p>
+            <p className="text-sm text-gray-500 mb-4">Use this base URL to trigger template messages from your backend or GitHub Actions.</p>
             <div className="flex items-center gap-3 bg-gray-50 p-3 rounded-xl border border-gray-200">
-              <input type="text" readOnly value={webhookUrl} className="bg-transparent font-mono text-sm flex-1 text-gray-700 outline-none" />
-              <button onClick={() => handleCopy(webhookUrl, "webhook")} className="bg-white border border-gray-200 hover:bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition">
-                {copiedStates["webhook"] ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
-                {copiedStates["webhook"] ? "Copied!" : "Copy"}
+              <input type="text" readOnly value={apiUrl} className="bg-transparent font-mono text-sm flex-1 text-gray-700 outline-none" />
+              <button onClick={() => handleCopy(apiUrl, "apiUrl")} className="bg-white border border-gray-200 hover:bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition">
+                {copiedStates["apiUrl"] ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
+                {copiedStates["apiUrl"] ? "Copied!" : "Copy"}
               </button>
             </div>
           </div>
@@ -241,7 +241,6 @@ export default function DevelopersPage() {
                   onChange={(e) => setSelectedTemplate(e.target.value)}
                   className="w-full bg-white border border-gray-200 text-gray-800 text-sm rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-[#00A884]/20 focus:border-[#00A884] shadow-sm font-medium"
                 >
-                  {/* 👇 Vercel fix: (tpl: any) लगा दिया गया है */}
                   {availableTemplates.map((tpl: any) => (
                     <option key={tpl.name} value={tpl.name}>{tpl.name}</option>
                   ))}
