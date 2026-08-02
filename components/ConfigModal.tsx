@@ -27,16 +27,15 @@ export default function ConfigModal({ isOpen, onClose, onSuccess }: ConfigModalP
   const [verifyToken, setVerifyToken] = useState("");
   const [webhookUrl, setWebhookUrl] = useState("");
   const [loading, setLoading] = useState(false);
-  const [isFbLoggingIn, setIsFbLoggingIn] = useState(false); // FB Login Button की लोडिंग के लिए
+  const [isFbLoggingIn, setIsFbLoggingIn] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
-  // 1. Data Load & Webhook URL Setup
+  // 1. Data Load & Webhook URL Setup (FIXED TOKEN LOGIC)
   useEffect(() => {
     if (isOpen) {
       const savedToken = localStorage.getItem("metaAccessToken") || "";
       const savedPhone = localStorage.getItem("phoneId") || ""; 
       const savedWaba = localStorage.getItem("wabaId") || "";   
-      const savedVerifyToken = localStorage.getItem("webhookVerifyToken");
 
       setAccessToken(savedToken);
       setPhoneId(savedPhone);
@@ -45,11 +44,14 @@ export default function ConfigModal({ isOpen, onClose, onSuccess }: ConfigModalP
       const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || window.location.origin;
       setWebhookUrl(`${baseUrl}/api/webhook`);
 
-      if (savedVerifyToken) {
-        setVerifyToken(savedVerifyToken);
+      // 👇 UPDATE: Random की जगह अब User ID से फिक्स टोकन बनेगा
+      const user = auth.currentUser;
+      if (user) {
+        // यह टोकन हमेशा सेम रहेगा, कभी नहीं बदलेगा!
+        const staticToken = "BASEKEY_" + user.uid.substring(0, 12).toUpperCase();
+        setVerifyToken(staticToken);
       } else {
-        const randomToken = "BASEKEY_" + Math.random().toString(36).substring(2, 15).toUpperCase();
-        setVerifyToken(randomToken);
+        setVerifyToken("BASEKEY_TEMP_TOKEN");
       }
     }
   }, [isOpen]);
@@ -115,7 +117,6 @@ export default function ConfigModal({ isOpen, onClose, onSuccess }: ConfigModalP
     setLoading(false);
   };
 
-  // ✅ UPDATED: Facebook Embedded Signup Logic
   const handleFacebookLogin = () => {
     if (!window.FB) {
       alert("Facebook SDK is still loading. Please try again in a few seconds.");
@@ -123,22 +124,15 @@ export default function ConfigModal({ isOpen, onClose, onSuccess }: ConfigModalP
     }
 
     setIsFbLoggingIn(true);
-
-    // .env से Config ID लेगा, अगर नहीं मिला तो तुम्हारा टेस्टिंग वाला इस्तेमाल करेगा
     const configId = process.env.NEXT_PUBLIC_META_CONFIG_ID || '1392579292765106';
 
     window.FB.login((response: any) => {
       setIsFbLoggingIn(false);
 
       if (response.authResponse) {
-        // Embedded Signup में Token की जगह 'code' आता है
         const code = response.authResponse.code;
         console.log('WhatsApp Onboarding Success! Auth Code:', code);
-        
         alert("Success! Check Console for Auth Code.");
-        
-        // TODO: Next step me is 'code' ko backend par bhej kar Permanent Token lena hoga
-        
       } else {
         console.log('User cancelled login or did not fully authorize.');
       }
@@ -259,10 +253,10 @@ export default function ConfigModal({ isOpen, onClose, onSuccess }: ConfigModalP
               </div>
 
               <div className="mt-6 pt-5 border-t border-gray-200 space-y-4">
-                <div className="flex items-start gap-3 bg-blue-50/80 p-4 rounded-2xl border border-blue-100">
-                  <ShieldAlert className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
-                  <p className="text-sm text-blue-800 leading-relaxed font-medium">
-                    Put these details in your Meta Developer Dashboard <strong>Webhooks</strong> section.
+                <div className="flex items-start gap-3 bg-red-50/80 p-4 rounded-2xl border border-red-100">
+                  <ShieldAlert className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+                  <p className="text-sm text-red-800 leading-relaxed font-medium">
+                    <strong>IMPORTANT:</strong> You MUST click the green "Save & Link" button below <strong>BEFORE</strong> you verify this token on the Meta Dashboard!
                   </p>
                 </div>
                 
