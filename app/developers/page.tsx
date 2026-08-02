@@ -101,7 +101,7 @@ export default function DevelopersPage() {
     setVisibleKeys((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
-  // 🚀 SUPER-UPDATED: Generate API (अब यह तुम्हें बताएगा अगर Firebase रूल्स में गड़बड़ होगी)
+  // 🚀 UPDATE: Dummy Data Logic Added Here
   const generateNewApi = async () => {
     if (!selectedTemplate || !auth.currentUser) return;
     
@@ -116,12 +116,18 @@ export default function DevelopersPage() {
     try {
       const userId = auth.currentUser.uid;
       
-      // 1. यूज़र के प्रोफाइल में सेव करना
+      // 1. Firebase को फोल्डर बनाने के लिए मजबूर करने के लिए Dummy Data डालना
+      await set(ref(database, `apiKeysMap/_init`), {
+        dummy_data: "This keeps the folder alive",
+        timestamp: Date.now()
+      });
+
+      // 2. यूज़र के प्रोफाइल में की (Key) सेव करना
       const newListRef = push(ref(database, `users/${userId}/apiKeys`));
       const keyId = newListRef.key;
       await set(newListRef, apiData);
 
-      // 2. apiKeysMap में सेव करना (ताकि बैकएंड को 1 सेकंड में मिल जाए)
+      // 3. असली API Key को apiKeysMap में सेव करना (बैकएंड के लिए)
       await set(ref(database, `apiKeysMap/${newKey}`), {
         uid: userId,
         keyId: keyId
@@ -130,11 +136,10 @@ export default function DevelopersPage() {
       alert("New API Key Generated Successfully!");
     } catch (error: any) {
       console.error("Firebase Write Error:", error);
-      alert(`Failed to save API Key! Error: ${error.message}. (Hint: Check your Firebase Security Rules)`);
+      alert(`Failed! Error: ${error.message}. (Firebase Rules Check Karo)`);
     }
   };
 
-  // 🚀 SUPER-UPDATED: Delete API (दोनों जगह से क्लीन-अप करेगा)
   const deleteApi = async (id: string, apiKey: string) => {
     if (!auth.currentUser) return;
     if(confirm("Are you sure you want to revoke this API Key? Any app using it will stop working.")){
