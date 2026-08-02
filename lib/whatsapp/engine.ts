@@ -14,20 +14,13 @@ interface IncomingSignal {
   value: string; // text body, OR button/list reply id
 }
 
-// ─── 1. Load the active flow (cache this in prod — Redis/memory, 60s TTL) ───
-async function getActiveFlow(): Promise<FlowGraph | null> {
-  const flow = await db.chatFlow.findFirst({ where: { isActive: true } });
-  if (!flow) return null;
-  return { nodes: flow.nodes as unknown as WhatsAppNode[], edges: flow.edges as unknown as Edge[] };
-}
-
-// ─── 2. Find the entry node: the one node nobody points TO ───
+// ─── 1. Find the entry node: the one node nobody points TO ───
 function findEntryNode(graph: FlowGraph): WhatsAppNode | null {
   const targets = new Set(graph.edges.map((e) => e.target));
   return graph.nodes.find((n) => !targets.has(n.id)) ?? graph.nodes[0] ?? null;
 }
 
-// ─── 3. Given current node + signal, find which edge to follow ───
+// ─── 2. Given current node + signal, find which edge to follow ───
 function resolveNextEdge(node: WhatsAppNode, signal: IncomingSignal, graph: FlowGraph): Edge | null {
   const outgoing = graph.edges.filter((e) => e.source === node.id);
   if (outgoing.length === 0) return null;
@@ -38,8 +31,6 @@ function resolveNextEdge(node: WhatsAppNode, signal: IncomingSignal, graph: Flow
   }
 
   if (node.data.type === "list" && signal.type === "list_reply") {
-    // NOTE: ListNode abhi per-row handles expose nahi karta (sirf "default").
-    // Buttons wala hi pattern list rows par bhi lagao: id={`row-${row.id}`} — 15 min ka fix hai.
     const handleId = `row-${signal.value}`;
     return outgoing.find((e) => e.sourceHandle === handleId) ?? outgoing.find((e) => e.sourceHandle === "default") ?? outgoing[0];
   }
@@ -48,7 +39,7 @@ function resolveNextEdge(node: WhatsAppNode, signal: IncomingSignal, graph: Flow
   return outgoing.find((e) => e.sourceHandle === "default") ?? outgoing[0];
 }
 
-// ─── 4. Render + send a node's content via Meta API, return true if it PAUSES (waits for reply) ───
+// ─── 3. Render + send a node's content via Meta API, return true if it PAUSES (waits for reply) ───
 async function renderNode(node: WhatsAppNode, phoneId: string, to: string): Promise<boolean> {
   const data = node.data as WhatsAppNodeData;
 
@@ -72,7 +63,7 @@ async function renderNode(node: WhatsAppNode, phoneId: string, to: string): Prom
           body: { text: data.body },
           footer: data.footer ? { text: data.footer } : undefined,
           action: {
-            buttons: data.buttons.map((b) => ({
+            buttons: data.buttons.map((b: any) => ({
               type: "reply",
               reply: { id: b.id, title: b.text.slice(0, 20) }, // Meta caps button titles at 20 chars
             })),
@@ -89,21 +80,39 @@ async function renderNode(node: WhatsAppNode, phoneId: string, to: string): Prom
           body: { text: data.body },
           action: {
             button: data.buttonText,
-            sections: data.sections.map((s) => ({
+            sections: data.sections.map((s: any) => ({
               title: s.title,
-              rows: s.rows.map((r) => ({ id: r.id, title: r.title, description: r.description })),
+              rows: s.rows.map((r: any) => ({ id: r.id, title: r.title, description: r.description })),
             })),
           },
         },
       });
       return true; // PAUSE — waiting for user selection
+      
+    default:
+      return false;
   }
 }
 
-// ─── 5. THE ENGINE — call this from the webhook ───
-export async function runFlowEngine(phoneId: string, from: string, signal: IncomingSignal) {
-  const graph = await getActiveFlow();
-  if (!graph) return; // no published flow — do nothing, let human agent handle it
+// ─── 4. THE ENGINE — call this from the webhook ───
+export async function runFlowEngine(
+  phoneId: string, 
+  from: string, 
+  signal: IncomingSignal, 
+  userId: string, 
+  flowData: any
+) {
+  // 1. Agar Firebase se flow data khali aaya, toh flow run nahi hoga
+  if (!flowData || !flowData.nodes || !flowData.edges) {
+    console.log(`⚠️ No active flow data found in Firebase for userId: ${userId}`);
+    return;
+  }
+
+  // 2. Firebase se mile data ko Graph mein set kar diya
+  const graph: FlowGraph = {
+    nodes: flowData.nodes as WhatsAppNode[],
+    edges: flowData.edges as Edge[]
+  };
 
   const contact = await db.contact.findUnique({ where: { phoneNumber: from } });
   let currentNode: WhatsAppNode | null = null;
