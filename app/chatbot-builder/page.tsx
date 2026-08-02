@@ -19,6 +19,10 @@ import {
 } from "lucide-react";
 import { useChatbotStore } from "@/store/useChatbotStore";
 
+// 🚀 NAYA: Firebase Realtime Database imports
+import { auth, database } from "@/lib/firebase"; 
+import { ref, set } from "firebase/database";
+
 // Dynamic import with fixed path using @/ alias to avoid path issues
 const ChatbotCanvas = dynamic(
   () => import("@/components/chatbot/ChatbotCanvas"),
@@ -117,15 +121,39 @@ export default function ChatbotBuilderPage() {
   const [jsonData, setJsonData] = useState<object | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  // 🚀 NAYA BADAAL: Asli Firebase Realtime Database Saving Logic
   const handleSave = useCallback(async () => {
     setSaveStatus("saving");
     
-    const json = exportFlowAsJSON();
-    console.log("Saving Canvas Flow to Database:", json);
+    try {
+      const json = exportFlowAsJSON();
+      const currentUser = auth.currentUser; // Current logged-in user check karega
+      
+      if (currentUser) {
+        // Agar user login hai, toh uske UID ke andar data save hoga
+        const dbRef = ref(database, `users/${currentUser.uid}/chatFlows/main_flow`);
+        await set(dbRef, {
+          flowData: json,
+          updatedAt: new Date().toISOString()
+        });
+        console.log("✅ Flow successfully saved to Firebase RTDB!");
+      } else {
+        // Test karne ke liye (agar login nahi hai)
+        console.warn("⚠️ No user logged in. Saving to public test path...");
+        const dbRef = ref(database, `public_test_flows/main_flow`);
+        await set(dbRef, {
+          flowData: json,
+          updatedAt: new Date().toISOString()
+        });
+      }
 
-    await new Promise((r) => setTimeout(r, 900)); // Simulate API delay
-    setSaveStatus("saved");
-    setTimeout(() => setSaveStatus("idle"), 2500);
+      setSaveStatus("saved");
+    } catch (error) {
+      console.error("❌ Firebase Save Error:", error);
+    } finally {
+      // 2.5 second baad wapas normal state me le aayega
+      setTimeout(() => setSaveStatus("idle"), 2500);
+    }
   }, [exportFlowAsJSON]);
 
   const handleExport = useCallback(() => {
