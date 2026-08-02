@@ -3,7 +3,7 @@ import { initializeApp, getApps } from "firebase-admin/app";
 import { getDatabase } from "firebase-admin/database";
 import admin from "firebase-admin";
 
-// 1. Firebase Admin SDK Initialization (Server-side के लिए)
+// 1. Firebase Admin SDK Initialization
 if (!getApps().length) {
   initializeApp({
     credential: admin.credential.cert({
@@ -29,7 +29,7 @@ export async function POST(req: Request) {
     }
     const clientApiKey = authHeader.replace("Bearer ", "").trim();
 
-    // 3. Request Body से डेटा निकालना (language भी अब dynamic कर दिया है)
+    // 3. Request Body से डेटा निकालना
     const body = await req.json();
     const { template, phone, variables, language } = body;
 
@@ -40,40 +40,43 @@ export async function POST(req: Request) {
       );
     }
 
-    // 4. Firebase से ढूँढना कि यह API Key किस यूज़र की है
-    const usersRef = db.ref("users");
-    const snapshot = await usersRef.once("value");
+    // 4. ⚡ BLAZING FAST LOOKUP: सीधा apiKeysMap से यूज़र का UID ढूँढना (लूप की छुट्टी!)
+    const mapRef = db.ref(`apiKeysMap/${clientApiKey}`);
+    const mapSnap = await mapRef.once("value");
 
-    let matchedUserId: string | null = null;
-    let matchedConfig: any = null;
-
-    if (snapshot.exists()) {
-      const usersData = snapshot.val();
-      for (const uid of Object.keys(usersData)) {
-        const apiKeysObj = usersData[uid]?.apiKeys;
-        if (apiKeysObj) {
-          const foundKeyEntry = Object.values(apiKeysObj).find(
-            (item: any) => item.apiKey === clientApiKey
-          );
-          if (foundKeyEntry) {
-            matchedUserId = uid;
-            matchedConfig = usersData[uid]?.config;
-            break;
-          }
-        }
-      }
-    }
-
-    if (!matchedUserId || !matchedConfig || !matchedConfig.accessToken || !matchedConfig.phoneId) {
+    if (!mapSnap.exists()) {
       return NextResponse.json(
         { error: "Unauthorized: Invalid or revoked API Key" },
         { status: 401 }
       );
     }
 
+    const mappingData = mapSnap.val();
+    // फ्रंटएंड से हमने object के रूप में {uid: ..., keyId: ...} सेव किया है
+    const matchedUserId = typeof mappingData === "object" ? mappingData.uid : mappingData;
+
+    // 5. सिर्फ उसी (matched) यूज़र का config फेच करना
+    const configRef = db.ref(`users/${matchedUserId}/config`);
+    const configSnap = await configRef.once("value");
+
+    if (!configSnap.exists()) {
+      return NextResponse.json(
+        { error: "Configuration not found for this API Key" },
+        { status: 404 }
+      );
+    }
+
+    const matchedConfig = configSnap.val();
     const { accessToken, phoneId } = matchedConfig;
 
-    // 5. Meta (WhatsApp) के लिए Variables (Components) तैयार करना
+    if (!accessToken || !phoneId) {
+      return NextResponse.json(
+        { error: "Incomplete Meta configuration in database" },
+        { status: 400 }
+      );
+    }
+
+    // 6. Meta (WhatsApp) के लिए Variables तैयार करना
     let components = [];
     if (variables && Array.isArray(variables) && variables.length > 0) {
       components.push({
@@ -85,7 +88,7 @@ export async function POST(req: Request) {
       });
     }
 
-    // 6. Meta Cloud API को असली रिक्वेस्ट भेजना
+    // 7. Meta Cloud API को रिक्वेस्ट भेजना
     const metaRes = await fetch(`https://graph.facebook.com/v21.0/${phoneId}/messages`, {
       method: "POST",
       headers: {
@@ -106,7 +109,6 @@ export async function POST(req: Request) {
 
     const metaData = await metaRes.json();
 
-    // अगर Meta ने कोई एरर दिया
     if (metaData.error) {
       return NextResponse.json(
         { error: "Meta API Error", details: metaData.error.message },
@@ -114,7 +116,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // 7. सब कुछ सही रहने पर Success रिस्पॉन्स भेजना
     return NextResponse.json(
       { 
         success: true, 
