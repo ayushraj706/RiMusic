@@ -1,3 +1,4 @@
+// App/api/webhook/route.ts
 import { NextResponse } from "next/server";
 import { initializeApp, getApps, cert } from "firebase-admin/app";
 import { getDatabase } from "firebase-admin/database";
@@ -77,14 +78,20 @@ export async function POST(req: Request) {
         // ─── A. RECEIVED MESSAGES ───
         if (value.messages && value.messages.length > 0) {
           for (const message of value.messages) {
-            await handleIncomingMessage(phoneId, message, value.contacts);
+            // 🔥 AWAIT HATA DIYA HAI: Ab ye background me chalega
+            handleIncomingMessage(phoneId, message, value.contacts).catch(e => 
+              console.error("Background Message Error:", e)
+            );
           }
         }
 
         // ─── B. STATUS UPDATES (Read Receipts) ───
         if (value.statuses && value.statuses.length > 0) {
           for (const status of value.statuses) {
-            await handleStatusUpdate(phoneId, status);
+            // 🔥 AWAIT HATA DIYA HAI: Ab ye background me chalega
+            handleStatusUpdate(phoneId, status).catch(e => 
+              console.error("Background Status Error:", e)
+            );
           }
         }
 
@@ -97,6 +104,7 @@ export async function POST(req: Request) {
       }
     }
 
+    // ⚡ WhatsApp ko turant 200 OK bhej do! Vercel Timeout Issue Solved.
     return new NextResponse("EVENT_RECEIVED", { status: 200 });
   } catch (error) {
     console.error("Webhook Processing Error:", error);
@@ -230,7 +238,6 @@ async function handleStatusUpdate(phoneId: string, status: any) {
   const snapshot = await messagesRef.orderByChild("sender").equalTo("me").limitToLast(5).once("value");
 
   if (snapshot.exists()) {
-    // YAHAN FIX KIYA GAYA HAI: let targetMessageRef: any = null;
     let targetMessageRef: any = null;
     let foundByMetaId = false;
 
