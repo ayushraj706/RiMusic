@@ -1,36 +1,18 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
-// NAYA: Phone aur VideoIcon imports yahan se hata diye gaye hain
 import { ArrowLeft, MoreVertical, Trash2, X } from "lucide-react";
 import { onAuthStateChanged, User } from "firebase/auth";
-import { auth } from "../../lib/firebase";
+import { auth } from "../../lib/firebase"; // Auth abhi bhi Firebase pe hi rakhenge login ke liye
 
 import Sidebar from "../../components/chat/Sidebar";
 import ChatBubble from "../../components/chat/ChatBubble";
 import ChatInput from "../../components/chat/ChatInput";
 import ThemeSelector, { ChatTheme } from "../../components/chat/ThemeSelector";
 
-import {
-  Contact,
-  ChatMessage,
-  UserConfig,
-  MetaTemplate,
-  listenToContacts,
-  listenToChat,
-  getUserConfig,
-  markContactRead,
-  setContactWallpaper,
-  deleteMessageFromFirebase,
-  deleteMessagesFromFirebase,
-  clearChatInFirebase,
-  sendTextMessage,
-  sendMediaMessage,
-  sendLocationMessage,
-  sendTemplateMessage,
-} from "../../lib/chatLogic";
+// Types sirf types ke liye import kar rahe hain, functions hata diye hain
+import { Contact, ChatMessage, MetaTemplate } from "../../lib/chatLogic";
 
-// ─── Default wallpaper (WhatsApp doodle) shown until a contact picks one ───
 const DEFAULT_WALLPAPER: ChatTheme = {
   id: "default",
   name: "Default",
@@ -40,18 +22,13 @@ const DEFAULT_WALLPAPER: ChatTheme = {
 };
 
 export default function ChatPage() {
-  // ─── URL Bar Hiding Logic (Mobile ke liye) ──────────────────────────────
+  // ─── URL Bar Hiding Logic ──────────────────────────────
   useEffect(() => {
-    // Jaise hi page load ho, thoda sa scroll kardo taaki mobile browser ka URL bar upar hide ho jaye
     const hideUrlBar = () => {
-      setTimeout(() => {
-        window.scrollTo(0, 1);
-      }, 100);
+      setTimeout(() => window.scrollTo(0, 1), 100);
     };
-    
     window.addEventListener("load", hideUrlBar);
-    hideUrlBar(); // Initial call
-    
+    hideUrlBar();
     return () => window.removeEventListener("load", hideUrlBar);
   }, []);
 
@@ -67,33 +44,11 @@ export default function ChatPage() {
     return () => unsub();
   }, []);
 
-  // ─── Meta / Cloudinary config ───────────────────────────────────────────
-  const [config, setConfig] = useState<UserConfig | null>(null);
-
-  useEffect(() => {
-    if (!user) return;
-    getUserConfig(user.uid).then(setConfig).catch(() => setConfig(null));
-  }, [user]);
-
-  // ─── Contacts (sidebar) ─────────────────────────────────────────────────
+  // ─── State Variables ────────────────────────────────────────────────────
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [activeContact, setActiveContact] = useState<Contact | null>(null);
-
-  useEffect(() => {
-    if (!config?.phoneId) return;
-    const unsub = listenToContacts(config.phoneId, setContacts);
-    return () => unsub();
-  }, [config?.phoneId]);
-
-  useEffect(() => {
-    if (!activeContact) return;
-    const fresh = contacts.find((c) => c.id === activeContact.id);
-    if (fresh) setActiveContact(fresh);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [contacts]);
-
-  // ─── Active chat thread ─────────────────────────────────────────────────
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  
   const [inputText, setInputText] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [replyingTo, setReplyingTo] = useState<{ text: string; sender: string; id: string } | null>(null);
@@ -104,15 +59,56 @@ export default function ChatPage() {
 
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
+  // ─── Fetch Contacts (API Polling for Live Sidebar) ──────────────────────
+  const fetchContacts = async () => {
+    try {
+      const res = await fetch("/api/chat/contacts");
+      if (res.ok) {
+        const data = await res.json();
+        setContacts(data);
+      }
+    } catch (e) {
+      console.error("Failed to fetch contacts", e);
+    }
+  };
+
   useEffect(() => {
-    if (!config?.phoneId || !activeContact) {
+    if (!user) return;
+    fetchContacts(); // Initial fetch
+    const interval = setInterval(fetchContacts, 3000); // Har 3 second me refresh
+    return () => clearInterval(interval);
+  }, [user]);
+
+  // Update active contact dynamically
+  useEffect(() => {
+    if (!activeContact) return;
+    const fresh = contacts.find((c) => c.id === activeContact.id);
+    if (fresh) setActiveContact(fresh);
+  }, [contacts]);
+
+  // ─── Fetch Messages (API Polling for Live Chat) ─────────────────────────
+  const fetchMessages = async () => {
+    if (!activeContact) return;
+    try {
+      const res = await fetch(`/api/chat/messages?contactId=${activeContact.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setMessages(data);
+      }
+    } catch (e) {
+      console.error("Failed to fetch messages", e);
+    }
+  };
+
+  useEffect(() => {
+    if (!activeContact) {
       setMessages([]);
       return;
     }
-    const unsub = listenToChat(config.phoneId, activeContact.id, setMessages);
-    markContactRead(config.phoneId, activeContact.id).catch(() => {});
-    return () => unsub();
-  }, [config?.phoneId, activeContact?.id]);
+    fetchMessages(); // Initial fetch
+    const interval = setInterval(fetchMessages, 2000); // Har 2 second me messages refresh (Live feel)
+    return () => clearInterval(interval);
+  }, [activeContact?.id]);
 
   useEffect(() => {
     if (chatContainerRef.current) {
@@ -120,47 +116,10 @@ export default function ChatPage() {
     }
   }, [messages]);
 
-  // ─── Wallpaper (per-contact, persisted via chatLogic) ──────────────────
-  const activeWallpaper: ChatTheme = activeContact?.wallpaperId
-    ? { ...DEFAULT_WALLPAPER, id: activeContact.wallpaperId, bgUrl: `https://picsum.photos/id/${activeContact.wallpaperId}/800/1400`, thumbUrl: `https://picsum.photos/id/${activeContact.wallpaperId}/144/256` }
-    : DEFAULT_WALLPAPER;
 
-  const handleThemeChange = async (theme: ChatTheme) => {
-    if (!config?.phoneId || !activeContact) return;
-    await setContactWallpaper(config.phoneId, activeContact.id, theme.id);
-  };
-
-  // ─── Guard: everything below requires a logged-in user + active contact ─
-  const requireContext = () => {
-    if (!user) {
-      alert("You must be logged in.");
-      return null;
-    }
-    if (!activeContact) {
-      alert("Select a conversation first.");
-      return null;
-    }
-    if (!config || !config.phoneId) {
-      alert("Meta API credentials missing. Please configure them in Settings.");
-      return null;
-    }
-    
-    const finalPhone = activeContact.phoneNumber || (activeContact as any).phone || activeContact.id;
-
-    return { 
-      phoneId: config.phoneId, 
-      contactId: activeContact.id, 
-      recipientPhone: finalPhone, 
-      config 
-    };
-  };
-
-  // ─── Send actions — all delegate to chatLogic, no direct API calls here ─
+  // ─── Send Actions (Sending via Next.js API) ──────────────────────────────
   const handleSendText = async () => {
-    if (!inputText.trim()) return;
-    const ctx = requireContext();
-    if (!ctx) return;
-
+    if (!inputText.trim() || !activeContact) return;
     setIsSending(true);
     const textToSend = inputText.trim();
     setInputText("");
@@ -168,64 +127,64 @@ export default function ChatPage() {
     setReplyingTo(null);
 
     try {
-      await sendTextMessage({ ...ctx, text: textToSend, replyTo: reply ? reply.text : null });
+      await fetch("/api/chat/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contactId: activeContact.id,
+          phoneNumber: activeContact.phoneNumber, // WhatsApp number
+          type: "TEXT",
+          body: textToSend,
+          replyTo: reply ? reply.text : null,
+        }),
+      });
+      fetchMessages(); // Bhejte hi turant messages refresh karo
     } catch (err: any) {
-      alert("Failed to send message: " + err.message);
+      alert("Failed to send message");
     } finally {
       setIsSending(false);
     }
   };
 
   const handleSendMedia = async (file: File, type: "image" | "video" | "document" | "audio") => {
-    const ctx = requireContext();
-    if (!ctx) return;
-    try {
-      await sendMediaMessage({ ...ctx, file, type });
-    } catch (err: any) {
-      alert("Failed to send media: " + err.message);
-    }
+    if (!activeContact) return;
+    // NOTE: Yahan pehle file ko Cloudinary par upload karna hoga ya API me FormData bhejna hoga
+    alert("Media API abhi set karni baaki hai backend me!");
   };
 
   const handleSendLocation = async (lat: number, lng: number) => {
-    const ctx = requireContext();
-    if (!ctx) return;
-    try {
-      await sendLocationMessage({ ...ctx, lat, lng });
-    } catch (err: any) {
-      alert("Failed to share location: " + err.message);
-    }
+    if (!activeContact) return;
+    alert("Location API abhi set karni baaki hai backend me!");
   };
 
   const handleSendTemplate = async (template: MetaTemplate) => {
-    const ctx = requireContext();
-    if (!ctx) return;
-    try {
-      await sendTemplateMessage({ ...ctx, template });
-    } catch (err: any) {
-      alert("Failed to send template: " + err.message);
-    }
+    if (!activeContact) return;
+    alert("Template API abhi set karni baaki hai backend me!");
   };
 
-  // ─── Message management ─────────────────────────────────────────────────
+  // ─── Message Management ─────────────────────────────────────────────────
   const handleDeleteSingle = async (id: string) => {
-    if (!config?.phoneId || !activeContact) return;
-    await deleteMessageFromFirebase(config.phoneId, activeContact.id, id);
+    if (!activeContact || !window.confirm("Are you sure?")) return;
+    await fetch(`/api/chat/messages?id=${id}`, { method: "DELETE" });
+    fetchMessages();
   };
 
   const handleClearAll = async () => {
-    if (!config?.phoneId || !activeContact) return;
-    if (window.confirm("Are you sure you want to clear this entire chat?")) {
-      await clearChatInFirebase(config.phoneId, activeContact.id);
-      setShowMenu(false);
-    }
+    if (!activeContact || !window.confirm("Clear this entire chat?")) return;
+    await fetch(`/api/chat/messages?contactId=${activeContact.id}&action=clear`, { method: "DELETE" });
+    setShowMenu(false);
+    fetchMessages();
   };
 
   const handleBulkDelete = async () => {
-    if (!config?.phoneId || !activeContact) return;
-    if (window.confirm(`Delete ${selectedIds.length} selected messages?`)) {
-      await deleteMessagesFromFirebase(config.phoneId, activeContact.id, selectedIds);
-      setSelectedIds([]);
-    }
+    if (!activeContact || !window.confirm(`Delete ${selectedIds.length} messages?`)) return;
+    await fetch(`/api/chat/messages`, { 
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: selectedIds })
+    });
+    setSelectedIds([]);
+    fetchMessages();
   };
 
   const toggleSelect = (id: string) => {
@@ -239,19 +198,15 @@ export default function ChatPage() {
     setShowMenu(false);
   }, []);
 
-  // ─── Render ──────────────────────────────────────────────────────────────
-  if (authLoading) {
-    return <div className="flex items-center justify-center h-screen text-gray-400">Loading...</div>;
-  }
+  // Wallpaper mapping
+  const activeWallpaper: ChatTheme = DEFAULT_WALLPAPER;
 
-  if (!user) {
-    return <div className="flex items-center justify-center h-screen text-gray-500">Please log in to view your chats.</div>;
-  }
+  // ─── Render ──────────────────────────────────────────────────────────────
+  if (authLoading) return <div className="flex items-center justify-center h-screen text-gray-400">Loading...</div>;
+  if (!user) return <div className="flex items-center justify-center h-screen text-gray-500">Please log in to view your chats.</div>;
 
   return (
-    // NAYA: h-screen ko h-[100dvh] kar diya gaya hai taki keyboard open hone par height dynamically adjust ho
     <div className="flex h-[100dvh] w-full bg-gray-100 overflow-hidden">
-      {/* ─── Sidebar ─── */}
       <Sidebar
         contacts={contacts}
         activeContactId={activeContact?.id ?? null}
@@ -259,7 +214,6 @@ export default function ChatPage() {
         className={`w-full sm:w-[360px] shrink-0 ${activeContact ? "hidden sm:flex" : "flex"}`}
       />
 
-      {/* ─── Main Chat Window ─── */}
       <div className={`flex-col flex-1 min-w-0 ${activeContact ? "flex" : "hidden sm:flex"}`}>
         {!activeContact ? (
           <div className="flex-1 flex items-center justify-center bg-[#F0F2F5] text-gray-400">
@@ -289,25 +243,23 @@ export default function ChatPage() {
                     </button>
                     <div className="w-10 h-10 bg-gray-300 rounded-full overflow-hidden shrink-0">
                       <img
-                        src={activeContact.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${activeContact.id}`}
+                        src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${activeContact.id}`}
                         alt="Avatar"
                         className="w-full h-full object-cover"
                       />
                     </div>
                     <div className="flex flex-col min-w-0">
                       <span className="font-semibold text-[16px] leading-tight truncate">
-                        {activeContact.name || activeContact.id}
+                        {activeContact.name || activeContact.phoneNumber}
                       </span>
                       <span className="text-[12px] text-white/80">
-                        {activeContact.phoneNumber || (activeContact as any).phone || activeContact.id}
+                        {activeContact.phoneNumber}
                       </span>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-1 shrink-0">
-                    {/* NAYA: Call aur Video icons yahan se hata diye gaye hain */}
-                    
-                    <ThemeSelector currentTheme={activeWallpaper.id !== "default" ? activeWallpaper : null} onChange={handleThemeChange} />
+                    <ThemeSelector currentTheme={activeWallpaper} onChange={() => {}} />
 
                     <div className="relative">
                       <button onClick={() => setShowMenu(!showMenu)} className="p-2 hover:bg-white/20 rounded-full transition">
@@ -361,7 +313,7 @@ export default function ChatPage() {
                     onToggleSelect={toggleSelect}
                     onDelete={handleDeleteSingle}
                     onReply={(m) => setReplyingTo({ text: m.text || `${m.type} message`, sender: m.sender, id: m.id })}
-                    contactName={activeContact.name || activeContact.id}
+                    contactName={activeContact.name || activeContact.phoneNumber}
                   />
                 ))
               )}
@@ -376,7 +328,7 @@ export default function ChatPage() {
               isSending={isSending}
               replyingTo={replyingTo}
               onCancelReply={() => setReplyingTo(null)}
-              activeContactName={activeContact.name || activeContact.id}
+              activeContactName={activeContact.name || activeContact.phoneNumber}
               onSendMedia={handleSendMedia}
               onSendLocation={handleSendLocation}
               onSendInteractive={(type) => console.log("Interactive sent:", type)}
