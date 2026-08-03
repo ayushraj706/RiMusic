@@ -1,0 +1,367 @@
+"use client";
+
+import React, { useState, useRef, useEffect, useCallback } from "react";
+import { ArrowLeft, MoreVertical, Trash2, X, Phone, Video as VideoIcon } from "lucide-react";
+import { onAuthStateChanged, User } from "firebase/auth";
+import { auth } from "../../lib/firebase";
+
+import Sidebar from "../../components/chat/Sidebar";
+import ChatBubble from "../../components/chat/ChatBubble";
+import ChatInput from "../../components/chat/ChatInput";
+import ThemeSelector, { ChatTheme } from "../../components/chat/ThemeSelector";
+
+import {
+  Contact,
+  ChatMessage,
+  UserConfig,
+  MetaTemplate,
+  listenToContacts,
+  listenToChat,
+  getUserConfig,
+  markContactRead,
+  setContactWallpaper,
+  deleteMessageFromFirebase,
+  deleteMessagesFromFirebase,
+  clearChatInFirebase,
+  sendTextMessage,
+  sendMediaMessage,
+  sendLocationMessage,
+  sendTemplateMessage,
+} from "../../lib/chatLogic";
+
+// ─── Default wallpaper (WhatsApp doodle) shown until a contact picks one ───
+const DEFAULT_WALLPAPER: ChatTheme = {
+  id: "default",
+  name: "Default",
+  bgUrl: "https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png",
+  thumbUrl: "https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png",
+  accent: "#00A884",
+};
+
+export default function ChatPage() {
+  // ─── Auth ───────────────────────────────────────────────────────────────
+  const [user, setUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+      setAuthLoading(false);
+    });
+    return () => unsub();
+  }, []);
+
+  // ─── Meta / Cloudinary config ───────────────────────────────────────────
+  const [config, setConfig] = useState<UserConfig | null>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    getUserConfig(user.uid).then(setConfig).catch(() => setConfig(null));
+  }, [user]);
+
+  // ─── Contacts (sidebar) ─────────────────────────────────────────────────
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [activeContact, setActiveContact] = useState<Contact | null>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    const unsub = listenToContacts(user.uid, setContacts);
+    return () => unsub();
+  }, [user]);
+
+  // Keep the active contact's live fields (unread, lastMessage) in sync
+  // as the contacts list updates in real time.
+  useEffect(() => {
+    if (!activeContact) return;
+    const fresh = contacts.find((c) => c.id === activeContact.id);
+    if (fresh) setActiveContact(fresh);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contacts]);
+
+  // ─── Active chat thread ─────────────────────────────────────────────────
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [inputText, setInputText] = useState("");
+  const [isSending, setIsSending] = useState(false);
+  const [replyingTo, setReplyingTo] = useState<{ text: string; sender: string; id: string } | null>(null);
+
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const isSelectionMode = selectedIds.length > 0;
+  const [showMenu, setShowMenu] = useState(false);
+
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!user || !activeContact) {
+      setMessages([]);
+      return;
+    }
+    const unsub = listenToChat(user.uid, activeContact.id, setMessages);
+    markContactRead(user.uid, activeContact.id).catch(() => {});
+    return () => unsub();
+  }, [user, activeContact?.id]);
+
+  useEffect(() => {
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+    }
+  }, [messages]);
+
+  // ─── Wallpaper (per-contact, persisted via chatLogic) ──────────────────
+  const activeWallpaper: ChatTheme = activeContact?.wallpaperId
+    ? { ...DEFAULT_WALLPAPER, id: activeContact.wallpaperId, bgUrl: `https://picsum.photos/id/${activeContact.wallpaperId}/800/1400`, thumbUrl: `https://picsum.photos/id/${activeContact.wallpaperId}/144/256` }
+    : DEFAULT_WALLPAPER;
+
+  const handleThemeChange = async (theme: ChatTheme) => {
+    if (!user || !activeContact) return;
+    await setContactWallpaper(user.uid, activeContact.id, theme.id);
+  };
+
+  // ─── Guard: everything below requires a logged-in user + active contact ─
+  const requireContext = () => {
+    if (!user) {
+      alert("You must be logged in.");
+      return null;
+    }
+    if (!activeContact) {
+      alert("Select a conversation first.");
+      return null;
+    }
+    if (!config) {
+      alert("Meta API credentials missing. Please configure them in Settings.");
+      return null;
+    }
+    return { uid: user.uid, contactId: activeContact.id, recipientPhone: activeContact.phone, config };
+  };
+
+  // ─── Send actions — all delegate to chatLogic, no direct API calls here ─
+
+  const handleSendText = async () => {
+    if (!inputText.trim()) return;
+    const ctx = requireContext();
+    if (!ctx) return;
+
+    setIsSending(true);
+    const textToSend = inputText.trim();
+    setInputText("");
+    const reply = replyingTo;
+    setReplyingTo(null);
+
+    try {
+      await sendTextMessage({ ...ctx, text: textToSend, replyTo: reply ? reply.text : null });
+    } catch (err: any) {
+      alert("Failed to send message: " + err.message);
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const handleSendMedia = async (file: File, type: "image" | "video" | "document" | "audio") => {
+    const ctx = requireContext();
+    if (!ctx) return;
+    try {
+      await sendMediaMessage({ ...ctx, file, type });
+    } catch (err: any) {
+      alert("Failed to send media: " + err.message);
+    }
+  };
+
+  const handleSendLocation = async (lat: number, lng: number) => {
+    const ctx = requireContext();
+    if (!ctx) return;
+    try {
+      await sendLocationMessage({ ...ctx, lat, lng });
+    } catch (err: any) {
+      alert("Failed to share location: " + err.message);
+    }
+  };
+
+  const handleSendTemplate = async (template: MetaTemplate) => {
+    const ctx = requireContext();
+    if (!ctx) return;
+    try {
+      await sendTemplateMessage({ ...ctx, template });
+    } catch (err: any) {
+      alert("Failed to send template: " + err.message);
+    }
+  };
+
+  // ─── Message management ─────────────────────────────────────────────────
+
+  const handleDeleteSingle = async (id: string) => {
+    if (!user || !activeContact) return;
+    await deleteMessageFromFirebase(user.uid, activeContact.id, id);
+  };
+
+  const handleClearAll = async () => {
+    if (!user || !activeContact) return;
+    if (window.confirm("Are you sure you want to clear this entire chat?")) {
+      await clearChatInFirebase(user.uid, activeContact.id);
+      setShowMenu(false);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (!user || !activeContact) return;
+    if (window.confirm(`Delete ${selectedIds.length} selected messages?`)) {
+      await deleteMessagesFromFirebase(user.uid, activeContact.id, selectedIds);
+      setSelectedIds([]);
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]));
+  };
+
+  const handleSelectContact = useCallback((contact: Contact) => {
+    setActiveContact(contact);
+    setSelectedIds([]);
+    setReplyingTo(null);
+    setShowMenu(false);
+  }, []);
+
+  // ─── Render ──────────────────────────────────────────────────────────────
+
+  if (authLoading) {
+    return <div className="flex items-center justify-center h-screen text-gray-400">Loading...</div>;
+  }
+
+  if (!user) {
+    return <div className="flex items-center justify-center h-screen text-gray-500">Please log in to view your chats.</div>;
+  }
+
+  return (
+    <div className="flex h-screen w-full bg-gray-100 overflow-hidden">
+      {/* ─── Sidebar (desktop always visible, mobile hides when a chat is open) ─── */}
+      <Sidebar
+        contacts={contacts}
+        activeContactId={activeContact?.id ?? null}
+        onSelectContact={handleSelectContact}
+        className={`w-full sm:w-[360px] shrink-0 ${activeContact ? "hidden sm:flex" : "flex"}`}
+      />
+
+      {/* ─── Main Chat Window ─── */}
+      <div className={`flex-col flex-1 min-w-0 ${activeContact ? "flex" : "hidden sm:flex"}`}>
+        {!activeContact ? (
+          <div className="flex-1 flex items-center justify-center bg-[#F0F2F5] text-gray-400">
+            <p className="text-sm font-medium">Select a conversation to start chatting</p>
+          </div>
+        ) : (
+          <div className="flex flex-col h-full w-full relative overflow-hidden">
+            {/* Header */}
+            <header className="bg-[#008069] text-white px-4 py-2.5 flex items-center justify-between z-20 shadow-md shrink-0">
+              {isSelectionMode ? (
+                <div className="flex items-center justify-between w-full">
+                  <div className="flex items-center gap-4">
+                    <button onClick={() => setSelectedIds([])} className="p-1 hover:bg-white/20 rounded-full transition">
+                      <X className="w-6 h-6" />
+                    </button>
+                    <span className="font-semibold text-lg">{selectedIds.length} Selected</span>
+                  </div>
+                  <button onClick={handleBulkDelete} className="p-2 hover:bg-white/20 rounded-full transition">
+                    <Trash2 className="w-5 h-5" />
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center gap-3 min-w-0">
+                    <button onClick={() => setActiveContact(null)} className="sm:hidden p-1 -ml-1 hover:bg-white/20 rounded-full transition shrink-0">
+                      <ArrowLeft className="w-5 h-5" />
+                    </button>
+                    <div className="w-10 h-10 bg-gray-300 rounded-full overflow-hidden shrink-0">
+                      <img
+                        src={activeContact.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${activeContact.id}`}
+                        alt="Avatar"
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div className="flex flex-col min-w-0">
+                      <span className="font-semibold text-[16px] leading-tight truncate">{activeContact.name}</span>
+                      <span className="text-[12px] text-white/80">{activeContact.phone}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button className="p-2 hover:bg-white/20 rounded-full transition hidden sm:block"><VideoIcon className="w-5 h-5" /></button>
+                    <button className="p-2 hover:bg-white/20 rounded-full transition hidden sm:block"><Phone className="w-5 h-5" /></button>
+
+                    <ThemeSelector currentTheme={activeWallpaper.id !== "default" ? activeWallpaper : null} onChange={handleThemeChange} />
+
+                    <div className="relative">
+                      <button onClick={() => setShowMenu(!showMenu)} className="p-2 hover:bg-white/20 rounded-full transition">
+                        <MoreVertical className="w-5 h-5" />
+                      </button>
+                      {showMenu && (
+                        <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-xl py-2 text-gray-800 z-50 animate-in fade-in zoom-in-95 duration-100">
+                          <button
+                            onClick={handleClearAll}
+                            className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center gap-3 text-red-600 font-medium"
+                          >
+                            <Trash2 className="w-4 h-4" /> Clear Chat
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+            </header>
+
+            {/* Chat Area */}
+            <div
+              ref={chatContainerRef}
+              className="flex-1 overflow-y-auto px-2 sm:px-4 pt-4 pb-[90px]"
+              style={{
+                backgroundImage: `url('${activeWallpaper.bgUrl}')`,
+                backgroundSize: activeWallpaper.id === "default" ? "400px" : "cover",
+                backgroundRepeat: activeWallpaper.id === "default" ? "repeat" : "no-repeat",
+                backgroundPosition: "center",
+                backgroundColor: "#efeae2",
+              }}
+            >
+              <div className="flex justify-center mb-6">
+                <span className="bg-white/90 text-gray-500 text-[12px] px-3 py-1 rounded-lg shadow-sm font-medium">TODAY</span>
+              </div>
+
+              {messages.length === 0 ? (
+                <div className="flex items-center justify-center h-full">
+                  <span className="bg-[#FFF3C7] text-gray-600 text-[12px] px-4 py-2 rounded-xl shadow-sm text-center max-w-sm">
+                    No messages here yet. Send a message to start the conversation!
+                  </span>
+                </div>
+              ) : (
+                messages.map((msg) => (
+                  <ChatBubble
+                    key={msg.id}
+                    msg={msg}
+                    selectionMode={isSelectionMode}
+                    isSelected={selectedIds.includes(msg.id)}
+                    onToggleSelect={toggleSelect}
+                    onDelete={handleDeleteSingle}
+                    onReply={(m) => setReplyingTo({ text: m.text || `${m.type} message`, sender: m.sender, id: m.id })}
+                    contactName={activeContact.name}
+                  />
+                ))
+              )}
+            </div>
+
+            {/* Floating Chat Input */}
+            <ChatInput
+              uid={user.uid}
+              inputText={inputText}
+              setInputText={setInputText}
+              onSend={handleSendText}
+              isSending={isSending}
+              replyingTo={replyingTo}
+              onCancelReply={() => setReplyingTo(null)}
+              activeContactName={activeContact.name}
+              onSendMedia={handleSendMedia}
+              onSendLocation={handleSendLocation}
+              onSendInteractive={(type) => console.log("Interactive sent:", type)}
+              onSendTemplate={handleSendTemplate}
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
