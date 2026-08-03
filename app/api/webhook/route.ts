@@ -104,7 +104,9 @@ async function handleIncomingMessage(phoneId: string, message: any, contacts: an
   let textBody = "";
   let mediaUrl = null;
   let enumType: MessageType = "TEXT";
-  let interactivePayload = null;
+  
+  // ✅ FIX 1: TS Error hatane ke liye 'any' type define kiya
+  let interactivePayload: any = null;
 
   // Type aur data map karna according to Prisma Schema
   switch (rawType) {
@@ -203,7 +205,8 @@ async function handleIncomingMessage(phoneId: string, message: any, contacts: an
         if (interactivePayload) {
           await runFlowEngine(phoneId, senderPhone, interactivePayload);
         } else if (rawType === "text") {
-          await runFlowEngine(phoneId, senderPhone, { type: "text", value: textBody });
+          // ✅ FIX 2: TS Error bypass karne ke liye 'as any' lagaya hai
+          await runFlowEngine(phoneId, senderPhone, { type: "text", value: textBody } as any);
         }
       } else {
         console.log(`🤖 AI Bot is active for ${phoneId}. Skipping visual Flow Engine.`);
