@@ -14,56 +14,99 @@ export async function GET(req: Request) {
     
     if (range === "24h") startDate.setHours(now.getHours() - 24);
     else if (range === "7d") startDate.setDate(now.getDate() - 7);
-    else if (range === "15d") startDate.setDate(now.getDate() - 15); // NAYA: 15 Din ka filter add kiya
+    else if (range === "15d") startDate.setDate(now.getDate() - 15);
     else if (range === "30d") startDate.setDate(now.getDate() - 30);
 
-    // 2. Fetch Base Stats (Independent of time range for total system view)
-    const totalContacts = await prisma.contact.count();
-    const googleContacts = await prisma.contact.count({ where: { source: "google" } });
-    const csvContacts = await prisma.contact.count({ where: { source: "csv" } });
-    const manualContacts = await prisma.contact.count({ where: { source: "manual" } });
-    
-    const activeSessions = await prisma.contact.count({ where: { isSessionActive: true } });
-    const systemSettings = await prisma.systemSettings.findFirst();
-    const activeFlowsCount = await prisma.chatFlow.count({ where: { isActive: true } });
-    const approvedTemplatesCount = await prisma.template.count({ where: { status: "APPROVED" } });
-    const activeApiKeys = await prisma.apiKey.count({ where: { isRevoked: false } });
+    // 2. Fetch Base Stats parallel for speed
+    const [
+      totalContacts, googleContacts, csvContacts, manualContacts,
+      activeSessions, systemSettings, activeFlowsCount,
+      approvedTemplatesCount, activeApiKeys, messages
+    ] = await Promise.all([
+      prisma.contact.count(),
+      prisma.contact.count({ where: { source: "google" } }),
+      prisma.contact.count({ where: { source: "csv" } }),
+      prisma.contact.count({ where: { source: "manual" } }),
+      prisma.contact.count({ where: { isSessionActive: true } }),
+      prisma.systemSettings.findFirst(),
+      prisma.chatFlow.count({ where: { isActive: true } }),
+      prisma.template.count({ where: { status: "APPROVED" } }),
+      prisma.apiKey.count({ where: { isRevoked: false } }),
+      prisma.message.findMany({
+        where: { timestamp: { gte: startDate } },
+        orderBy: { timestamp: 'asc' }
+      })
+    ]);
 
-    // 3. Fetch Time-Filtered Messages
-    const messages = await prisma.message.findMany({
-      where: { timestamp: { gte: startDate } },
-      orderBy: { timestamp: 'asc' }
-    });
-
-    // 4. Analytics Data Aggregation (ZERO DUMMY DATA)
+    // 3. Analytics Data Aggregation (100% REAL DATA FROM DB)
     const stats = {
       outbound: { total: 0, read: 0, delivered: 0, sent: 0, chat: 0, flow: 0, api: 0, campaign: 0 },
       inbound: { total: 0, text: 0, image: 0, video: 0, document: 0, audio: 0, location: 0, sticker: 0, interactive: 0 },
       types: { template: 0, text: 0, media: 0, interactive: 0 }
     };
 
-    // Process every single message exactly as it is in the database
+    const chartDataArray: any[] = [];
+    const intervalMap = new Map();
+
+    // 4. Processing every single message exactly as it is in the database
     messages.forEach(msg => {
+      
+      // Graph Data ke liye bucket tayari
+      let key = range === "24h" 
+        ? new Date(msg.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
+        : new Date(msg.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      
+      if (!intervalMap.has(key)) {
+        intervalMap.set(key, { date: key, sent: 0, received: 0, api: 0, campaign: 0, template: 0 });
+      }
+      const bucket = intervalMap.get(key);
+
       if (msg.direction === "OUTBOUND") {
         stats.outbound.total++;
-        if (msg.status === "READ") stats.outbound.read++;
-        else if (msg.status === "DELIVERED") stats.outbound.delivered++;
-        else stats.outbound.sent++;
+        bucket.sent++;
+        
+        // FIX 1: CASCADING STATUS LOGIC
+        // Agar Read hai toh iska matlab Deliver aur Send bhi hua hoga
+        if (msg.status === "READ") {
+          stats.outbound.read++;
+          stats.outbound.delivered++; 
+          stats.outbound.sent++;
+        } else if (msg.status === "DELIVERED") {
+          stats.outbound.delivered++;
+          stats.outbound.sent++;
+        } else {
+          // Status SENT ya failed
+          stats.outbound.sent++;
+        }
 
         // Source Breakdown
         if (msg.source === "CHAT") stats.outbound.chat++;
-        if (msg.source === "FLOW") stats.outbound.flow++;
-        if (msg.source === "API") stats.outbound.api++;
-        if (msg.source === "CAMPAIGN") stats.outbound.campaign++;
+        else if (msg.source === "FLOW") stats.outbound.flow++;
+        else if (msg.source === "API") { 
+          stats.outbound.api++; 
+          bucket.api++; 
+        }
+        else if (msg.source === "CAMPAIGN") { 
+          stats.outbound.campaign++; 
+          bucket.campaign++; 
+        }
 
-        // Outbound Type Breakdown
-        if (msg.type === "TEMPLATE") stats.types.template++;
-        else if (msg.type === "TEXT") stats.types.text++;
-        else if (msg.type === "INTERACTIVE") stats.types.interactive++;
-        else stats.types.media++;
+        // FIX 2: TEMPLATE LOGIC (API & Campaign directly counted as Template)
+        if (msg.type === "TEMPLATE" || msg.source === "API" || msg.source === "CAMPAIGN") {
+          stats.types.template++;
+          bucket.template++;
+        } else if (msg.type === "TEXT") {
+          stats.types.text++;
+        } else if (msg.type === "INTERACTIVE") {
+          stats.types.interactive++;
+        } else {
+          stats.types.media++;
+        }
       } else {
-        // INBOUND
+        // INBOUND - Ek ek point ka hisaab (Document, Location sab idhar hai)
         stats.inbound.total++;
+        bucket.received++;
+
         if (msg.type === "TEXT") stats.inbound.text++;
         else if (msg.type === "IMAGE") stats.inbound.image++;
         else if (msg.type === "VIDEO") stats.inbound.video++;
@@ -75,30 +118,12 @@ export async function GET(req: Request) {
       }
     });
 
-    // 5. Generate Continuous Chart Data (Time Series for Graph)
-    const chartData: any[] = [];
-    const intervalMap = new Map();
+    intervalMap.forEach(val => chartDataArray.push(val));
 
-    messages.forEach(msg => {
-      let key = "";
-      if (range === "24h") {
-        key = new Date(msg.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-      } else {
-        // Yeh logic 7d, 15d, aur 30d teeno ke liye perfectly kaam karega
-        key = new Date(msg.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      }
-      
-      if (!intervalMap.has(key)) intervalMap.set(key, { date: key, sent: 0, received: 0 });
-      
-      const bucket = intervalMap.get(key);
-      if (msg.direction === "OUTBOUND") bucket.sent++;
-      else bucket.received++;
-    });
-
-    // Convert map to array
-    intervalMap.forEach(val => chartData.push(val));
-
-    const readRate = stats.outbound.total > 0 ? Math.round((stats.outbound.read / stats.outbound.total) * 100) : 0;
+    // Calculate accurate read rate based ONLY on delivered messages
+    const readRate = stats.outbound.delivered > 0 
+      ? Math.round((stats.outbound.read / stats.outbound.delivered) * 100) 
+      : 0;
 
     return NextResponse.json({
       contacts: { total: totalContacts, google: googleContacts, csv: csvContacts, manual: manualContacts },
@@ -113,7 +138,7 @@ export async function GET(req: Request) {
       inbound: stats.inbound,
       types: stats.types,
       readRate,
-      chartData
+      chartData: chartDataArray
     });
 
   } catch (error) {
