@@ -88,10 +88,10 @@ export default function Sidebar() {
       activePaths: ["/campaigns"],
     },
     {
-      href: "/",
+      href: "/chat", // UPDATE: Changed from "/" to "/chat"
       icon: MessageSquare,
       label: "Chat",
-      activePaths: ["/", "/chat"],
+      activePaths: ["/chat"], // UPDATE: Adjusted active paths
     },
     {
       href: "/chatbot-builder",
