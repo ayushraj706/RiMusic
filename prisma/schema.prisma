@@ -24,10 +24,12 @@ model Contact {
   id               String    @id @default(uuid())
   phoneNumber      String    @unique // WhatsApp Number (e.g., "918252366912")
   name             String?   // WhatsApp profile name
+  email            String?   // 👈 NAYA: Optional Email Field (Google/CSV import ke liye)
+  source           String    @default("manual") // 👈 NAYA: "google", "csv", ya "manual"
   unreadCount      Int       @default(0)
   lastMessageAt    DateTime  @default(now())
-  isSessionActive  Boolean   @default(true) // 24-Hour Session Window Window Indicator
-  activeFlowNodeId String?   // 👈 NAYA: Jis node pe user currently atka hai
+  isSessionActive  Boolean   @default(true) // 24-Hour Session Window Indicator
+  activeFlowNodeId String?   // 👈 Jis node pe user currently atka hai
   messages         Message[]
   createdAt        DateTime  @default(now())
 }
@@ -45,7 +47,7 @@ model Message {
   timestamp   DateTime      @default(now())
 }
 
-// 4. Chatbot Flow (React Flow JSON storage) 👈 NAYA MODEL
+// 4. Chatbot Flow (React Flow JSON storage)
 model ChatFlow {
   id        String   @id @default(uuid())
   name      String   @default("Default Flow")
