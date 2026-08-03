@@ -12,22 +12,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
-    // Prisma: Update the main settings row (upsert ensures it creates it if it doesn't exist)
     const settings = await prisma.systemSettings.upsert({
       where: { id: "main_settings" },
-      update: {
-        accessToken,
-        phoneNumberId,
-        businessAccountId,
-        verifyToken,
-      },
-      create: {
-        id: "main_settings",
-        accessToken,
-        phoneNumberId,
-        businessAccountId,
-        verifyToken,
-      },
+      update: { accessToken, phoneNumberId, businessAccountId, verifyToken },
+      create: { id: "main_settings", accessToken, phoneNumberId, businessAccountId, verifyToken },
     });
 
     return NextResponse.json({ success: true, settings });
