@@ -230,7 +230,8 @@ async function handleStatusUpdate(phoneId: string, status: any) {
   const snapshot = await messagesRef.orderByChild("sender").equalTo("me").limitToLast(5).once("value");
 
   if (snapshot.exists()) {
-    let targetMessageRef = null;
+    // YAHAN FIX KIYA GAYA HAI: let targetMessageRef: any = null;
+    let targetMessageRef: any = null;
     let foundByMetaId = false;
 
     snapshot.forEach((childSnapshot) => {
