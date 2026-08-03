@@ -279,7 +279,7 @@ export default function DevelopersPage() {
               )}
             </div>
 
-            {/* Expiry Select (Naya Feature) */}
+            {/* Expiry Select */}
             <div className="w-full md:w-48 shrink-0">
               <label className="text-sm font-bold text-gray-700 flex items-center gap-2 mb-2">
                 <Clock className="w-4 h-4 text-[#00A884]" /> Expiry Limit
@@ -324,8 +324,8 @@ export default function DevelopersPage() {
                 const currentPhone = testPhones[api.id] || "919876543210";
                 const requiredVars = getDummyVariables(api.name);
                 
-                // Expiry calculation check
-                const isExpired = api.expiresAt && new Date(api.expiresAt) < new Date();
+                // 🔥 FIX: Error fixed here. Now strictly true/false
+                const isExpired = api.expiresAt ? new Date(api.expiresAt) < new Date() : false;
                 
                 return (
                 <div key={api.id} className={`bg-white rounded-2xl shadow-sm border overflow-hidden ${isExpired ? "border-red-200 opacity-75" : "border-gray-200"}`}>
