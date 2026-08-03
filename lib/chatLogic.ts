@@ -63,14 +63,15 @@ export interface ChatMessage {
   templateName?: string;
 }
 
+// Updated to match the "info" node in your Firebase DB structure
 export interface Contact {
   id: string;
-  name: string;
-  phone: string;
+  name?: string;
+  phoneNumber?: string;
   avatarUrl?: string;
   lastMessage?: string;
-  lastMessageTime?: number;
-  unreadCount?: number;
+  updatedAt?: number;
+  unread?: number;
   wallpaperId?: string;
 }
 
@@ -115,6 +116,7 @@ function graphUrl(path: string): string {
 /**
  * Reads the logged-in user's Meta/Cloudinary credentials from
  * `users/{uid}/config`. Returns null if not configured yet.
+ * Note: Config usually remains under Auth UID even if chats are under phoneId.
  */
 export async function getUserConfig(uid: string): Promise<UserConfig | null> {
   const configRef = ref(database, `users/${uid}/config`);
@@ -136,55 +138,58 @@ export async function getUserConfig(uid: string): Promise<UserConfig | null> {
 // ─────────────────────────────────────────────────────────────────────────
 
 /**
- * Subscribes to `users/{uid}/contacts`, ordered by most recent activity.
+ * Subscribes to `chats/{phoneId}`, lists all contacts and their `info`.
  * Calls `callback` with the full contact list on every change.
- * Returns an unsubscribe function — call it on unmount.
  */
 export function listenToContacts(
-  uid: string,
+  phoneId: string,
   callback: (contacts: Contact[]) => void
 ): () => void {
-  const contactsRef = query(ref(database, `users/${uid}/contacts`), orderByChild("lastMessageTime"));
+  const chatsRef = ref(database, `chats/${phoneId}`);
 
   const handler = (snapshot: DataSnapshot) => {
     const list: Contact[] = [];
     snapshot.forEach((child) => {
-      list.push({ id: child.key as string, ...child.val() });
+      const contactData = child.val();
+      // Extract only the 'info' node to build the contact list
+      if (contactData && contactData.info) {
+        list.push({ id: child.key as string, ...contactData.info });
+      }
     });
-    // Most recent conversation first
-    list.reverse();
+    
+    // Sort by most recent activity (updatedAt)
+    list.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
     callback(list);
   };
 
-  onValue(contactsRef, handler);
-  return () => off(contactsRef, "value", handler);
+  onValue(chatsRef, handler);
+  return () => off(chatsRef, "value", handler);
 }
 
 /**
- * Creates a contact if it doesn't exist yet (e.g. first inbound message
- * from a new WhatsApp number, or manually starting a new chat).
+ * Updates or creates the `info` node for a specific contact.
  */
 export async function upsertContact(
-  uid: string,
+  phoneId: string,
   contactId: string,
   data: Partial<Contact>
 ): Promise<void> {
-  const contactRef = ref(database, `users/${uid}/contacts/${contactId}`);
-  await update(contactRef, data);
+  const infoRef = ref(database, `chats/${phoneId}/${contactId}/info`);
+  await update(infoRef, data);
 }
 
-export async function markContactRead(uid: string, contactId: string): Promise<void> {
-  const contactRef = ref(database, `users/${uid}/contacts/${contactId}`);
-  await update(contactRef, { unreadCount: 0 });
+export async function markContactRead(phoneId: string, contactId: string): Promise<void> {
+  const infoRef = ref(database, `chats/${phoneId}/${contactId}/info`);
+  await update(infoRef, { unread: 0 });
 }
 
 export async function setContactWallpaper(
-  uid: string,
+  phoneId: string,
   contactId: string,
   wallpaperId: string
 ): Promise<void> {
-  const contactRef = ref(database, `users/${uid}/contacts/${contactId}`);
-  await update(contactRef, { wallpaperId });
+  const infoRef = ref(database, `chats/${phoneId}/${contactId}/info`);
+  await update(infoRef, { wallpaperId });
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -192,17 +197,15 @@ export async function setContactWallpaper(
 // ─────────────────────────────────────────────────────────────────────────
 
 /**
- * Subscribes to `users/{uid}/chats/{contactId}/messages`.
- * Calls `callback` with the ordered message array on every change.
- * Returns an unsubscribe function.
+ * Subscribes to `chats/{phoneId}/{contactId}/messages`.
  */
 export function listenToChat(
-  uid: string,
+  phoneId: string,
   contactId: string,
   callback: (messages: ChatMessage[]) => void
 ): () => void {
   const msgsRef = query(
-    ref(database, `users/${uid}/chats/${contactId}/messages`),
+    ref(database, `chats/${phoneId}/${contactId}/messages`),
     orderByChild("timestamp")
   );
 
@@ -219,16 +222,15 @@ export function listenToChat(
 }
 
 /**
- * Writes a single message into `users/{uid}/chats/{contactId}/messages`
- * and bumps the contact's `lastMessage` / `lastMessageTime` preview.
- * Returns the generated Firebase key (== message id).
+ * Writes a single message into `chats/{phoneId}/{contactId}/messages`
+ * and bumps the contact's `lastMessage` / `updatedAt` preview in `info`.
  */
 export async function saveMessageToFirebase(
-  uid: string,
+  phoneId: string,
   contactId: string,
   message: Omit<ChatMessage, "id">
 ): Promise<string> {
-  const msgsRef = ref(database, `users/${uid}/chats/${contactId}/messages`);
+  const msgsRef = ref(database, `chats/${phoneId}/${contactId}/messages`);
   const newRef = push(msgsRef);
   await set(newRef, message);
 
@@ -241,54 +243,53 @@ export async function saveMessageToFirebase(
       ? "📍 Location"
       : `📎 ${message.type[0].toUpperCase()}${message.type.slice(1)}`;
 
-  await upsertContact(uid, contactId, {
+  await upsertContact(phoneId, contactId, {
     lastMessage: previewText,
-    lastMessageTime: message.timestamp,
+    updatedAt: message.timestamp,
   });
 
   return newRef.key as string;
 }
 
 export async function updateMessageStatus(
-  uid: string,
+  phoneId: string,
   contactId: string,
   messageId: string,
   status: ChatMessage["status"]
 ): Promise<void> {
-  const msgRef = ref(database, `users/${uid}/chats/${contactId}/messages/${messageId}`);
+  const msgRef = ref(database, `chats/${phoneId}/${contactId}/messages/${messageId}`);
   await update(msgRef, { status });
 }
 
 export async function deleteMessageFromFirebase(
-  uid: string,
+  phoneId: string,
   contactId: string,
   messageId: string
 ): Promise<void> {
-  const msgRef = ref(database, `users/${uid}/chats/${contactId}/messages/${messageId}`);
+  const msgRef = ref(database, `chats/${phoneId}/${contactId}/messages/${messageId}`);
   await remove(msgRef);
 }
 
 export async function deleteMessagesFromFirebase(
-  uid: string,
+  phoneId: string,
   contactId: string,
   messageIds: string[]
 ): Promise<void> {
   const updates: Record<string, null> = {};
   messageIds.forEach((id) => {
-    updates[`users/${uid}/chats/${contactId}/messages/${id}`] = null;
+    updates[`chats/${phoneId}/${contactId}/messages/${id}`] = null;
   });
   await update(ref(database), updates);
 }
 
-export async function clearChatInFirebase(uid: string, contactId: string): Promise<void> {
-  const msgsRef = ref(database, `users/${uid}/chats/${contactId}/messages`);
+export async function clearChatInFirebase(phoneId: string, contactId: string): Promise<void> {
+  const msgsRef = ref(database, `chats/${phoneId}/${contactId}/messages`);
   await remove(msgsRef);
-  await upsertContact(uid, contactId, { lastMessage: "", lastMessageTime: Date.now() });
+  await upsertContact(phoneId, contactId, { lastMessage: "", updatedAt: Date.now() });
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// 4. CLOUDINARY (permanent hosting for attachments, used for the bubble URL
-//    that gets persisted to Firebase — local blob: URLs don't survive reload)
+// 4. CLOUDINARY
 // ─────────────────────────────────────────────────────────────────────────
 
 export interface CloudinaryUploadResult {
@@ -297,10 +298,6 @@ export interface CloudinaryUploadResult {
   format: string;
 }
 
-/**
- * Uploads a File to Cloudinary using an unsigned upload preset.
- * `cloudName` / `uploadPreset` come from the user's saved config.
- */
 export async function uploadToCloudinary(
   file: File,
   cloudName: string,
@@ -310,8 +307,6 @@ export async function uploadToCloudinary(
   form.append("file", file);
   form.append("upload_preset", uploadPreset);
 
-  // Cloudinary infers resource type from the endpoint; "auto" handles
-  // images, video and raw documents/audio in one endpoint.
   const url = `https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`;
 
   const { data } = await axios.post(url, form, {
@@ -326,14 +321,9 @@ export async function uploadToCloudinary(
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// 5. META GRAPH API (send messages, upload media, fetch templates)
+// 5. META GRAPH API
 // ─────────────────────────────────────────────────────────────────────────
 
-/**
- * Uploads a local file to Meta's `/media` endpoint. Meta requires media to
- * be uploaded there first — the returned id is what gets referenced inside
- * an actual `/messages` payload.
- */
 export async function uploadMediaToMeta(
   phoneId: string,
   accessToken: string,
@@ -353,11 +343,6 @@ export async function uploadMediaToMeta(
   return data.id as string;
 }
 
-/**
- * Sends an already-built WhatsApp Cloud API payload to Meta's `/messages`
- * endpoint. This is the single low-level "talk to Facebook" function —
- * every message type (text/media/location/template) funnels through it.
- */
 export async function sendToMetaAPI(
   phoneId: string,
   accessToken: string,
@@ -376,9 +361,6 @@ export async function sendToMetaAPI(
   return data;
 }
 
-/**
- * Fetches every approved message template for the given WABA id.
- */
 export async function fetchMetaTemplates(
   wabaId: string,
   accessToken: string
@@ -393,13 +375,10 @@ export async function fetchMetaTemplates(
 
 // ─────────────────────────────────────────────────────────────────────────
 // 6. HIGH-LEVEL ORCHESTRATION
-//    These are the functions the UI actually calls. Each one: builds the
-//    Firebase message record, saves it, resolves media (Cloudinary for a
-//    durable URL + Meta media-id for delivery), then calls Meta to deliver.
 // ─────────────────────────────────────────────────────────────────────────
 
 interface SendTextParams {
-  uid: string;
+  phoneId: string;
   contactId: string;
   recipientPhone: string;
   config: UserConfig;
@@ -408,7 +387,7 @@ interface SendTextParams {
 }
 
 export async function sendTextMessage({
-  uid,
+  phoneId,
   contactId,
   recipientPhone,
   config,
@@ -425,7 +404,7 @@ export async function sendTextMessage({
     replyTo: replyTo ?? null,
   };
 
-  const id = await saveMessageToFirebase(uid, contactId, base);
+  const id = await saveMessageToFirebase(phoneId, contactId, base);
 
   try {
     await sendToMetaAPI(config.phoneId, config.accessToken, {
@@ -435,7 +414,7 @@ export async function sendTextMessage({
       text: { body: text },
     });
   } catch (err) {
-    await updateMessageStatus(uid, contactId, id, "failed");
+    await updateMessageStatus(phoneId, contactId, id, "failed");
     throw err;
   }
 
@@ -443,7 +422,7 @@ export async function sendTextMessage({
 }
 
 interface SendMediaParams {
-  uid: string;
+  phoneId: string;
   contactId: string;
   recipientPhone: string;
   config: UserConfig;
@@ -452,14 +431,13 @@ interface SendMediaParams {
 }
 
 export async function sendMediaMessage({
-  uid,
+  phoneId,
   contactId,
   recipientPhone,
   config,
   file,
   type,
 }: SendMediaParams): Promise<ChatMessage> {
-  // 1. Push a durable copy to Cloudinary so the bubble still renders after reload.
   let mediaUrl = "";
   if (config.cloudinaryCloudName && config.cloudinaryUploadPreset) {
     const uploaded = await uploadToCloudinary(
@@ -469,7 +447,6 @@ export async function sendMediaMessage({
     );
     mediaUrl = uploaded.secureUrl;
   } else {
-    // Fallback so the UI still has something to render immediately.
     mediaUrl = URL.createObjectURL(file);
   }
 
@@ -485,11 +462,9 @@ export async function sendMediaMessage({
     mediaSize: formatBytes(file.size),
   };
 
-  const id = await saveMessageToFirebase(uid, contactId, base);
+  const id = await saveMessageToFirebase(phoneId, contactId, base);
 
   try {
-    // 2. Upload to Meta separately — Meta needs its own media id, distinct
-    //    from the Cloudinary URL used for display.
     const mediaId = await uploadMediaToMeta(config.phoneId, config.accessToken, file);
     const mediaObject: Record<string, any> = { id: mediaId };
     if (type === "document") mediaObject.filename = file.name;
@@ -501,7 +476,7 @@ export async function sendMediaMessage({
       [type]: mediaObject,
     });
   } catch (err) {
-    await updateMessageStatus(uid, contactId, id, "failed");
+    await updateMessageStatus(phoneId, contactId, id, "failed");
     throw err;
   }
 
@@ -509,7 +484,7 @@ export async function sendMediaMessage({
 }
 
 interface SendLocationParams {
-  uid: string;
+  phoneId: string;
   contactId: string;
   recipientPhone: string;
   config: UserConfig;
@@ -518,7 +493,7 @@ interface SendLocationParams {
 }
 
 export async function sendLocationMessage({
-  uid,
+  phoneId,
   contactId,
   recipientPhone,
   config,
@@ -535,7 +510,7 @@ export async function sendLocationMessage({
     location: { lat, lng },
   };
 
-  const id = await saveMessageToFirebase(uid, contactId, base);
+  const id = await saveMessageToFirebase(phoneId, contactId, base);
 
   try {
     await sendToMetaAPI(config.phoneId, config.accessToken, {
@@ -550,7 +525,7 @@ export async function sendLocationMessage({
       },
     });
   } catch (err) {
-    await updateMessageStatus(uid, contactId, id, "failed");
+    await updateMessageStatus(phoneId, contactId, id, "failed");
     throw err;
   }
 
@@ -558,7 +533,7 @@ export async function sendLocationMessage({
 }
 
 interface SendTemplateParams {
-  uid: string;
+  phoneId: string;
   contactId: string;
   recipientPhone: string;
   config: UserConfig;
@@ -566,7 +541,7 @@ interface SendTemplateParams {
 }
 
 export async function sendTemplateMessage({
-  uid,
+  phoneId,
   contactId,
   recipientPhone,
   config,
@@ -582,7 +557,7 @@ export async function sendTemplateMessage({
     templateName: template.name,
   };
 
-  const id = await saveMessageToFirebase(uid, contactId, base);
+  const id = await saveMessageToFirebase(phoneId, contactId, base);
 
   try {
     await sendToMetaAPI(config.phoneId, config.accessToken, {
@@ -595,7 +570,7 @@ export async function sendTemplateMessage({
       },
     });
   } catch (err) {
-    await updateMessageStatus(uid, contactId, id, "failed");
+    await updateMessageStatus(phoneId, contactId, id, "failed");
     throw err;
   }
 
