@@ -140,11 +140,22 @@ async function handleIncomingMessage(phoneId: string, message: any, contacts: an
     default: text = `📎 ${messageType} message`;
   }
 
-  // Save message to Firebase
+  // Save message to Firebase (chats/{phoneId}/{senderPhone}/messages)
   const chatRef = db.ref(`chats/${phoneId}/${senderPhone}/messages`);
   await chatRef.push({
-    metaId: messageId, text, sender: "them", time: new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-    timestamp, status: "received", messageType, mediaUrl, mediaType, caption, location, interactive, button,
+    metaId: messageId, 
+    text, 
+    sender: "them", 
+    time: new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    timestamp, 
+    status: "received", 
+    messageType, 
+    mediaUrl, 
+    mediaType, 
+    caption, 
+    location, 
+    interactive, 
+    button,
   });
 
   // Update contact info in Firebase
@@ -164,14 +175,22 @@ async function handleIncomingMessage(phoneId: string, message: any, contacts: an
 
   // ─── 🔌 D. HAND OFF TO THE FLOW ENGINE (100% Firebase Now) ───
   try {
-    // Check if AI Bot is active from the user's Firebase config
-    const configSnap = await db.ref(`users/${phoneId}/config`).once("value");
-    const configData = configSnap.val() || {};
-    const isAiBotActive = configData.isAiBotActive === true;
+    // 1. Dhoondo ki is phoneId ka asali user (uid) kaun hai taaki uski settings padh sakein
+    let matchedUid = null;
+    let isAiBotActive = false;
 
-    if (!isAiBotActive) {
+    const usersSnap = await db.ref("users").once("value");
+    usersSnap.forEach((userChild) => {
+      const configData = userChild.val().config;
+      if (configData && configData.phoneId === phoneId) {
+        matchedUid = userChild.key;
+        isAiBotActive = configData.isAiBotActive === true;
+      }
+    });
+
+    if (!isAiBotActive && matchedUid) {
       // Check if a flow actually exists before running the engine
-      const flowSnapshot = await db.ref(`users/${phoneId}/chatFlows/main_flow`).once("value");
+      const flowSnapshot = await db.ref(`users/${matchedUid}/chatFlows/main_flow`).once("value");
       
       if (flowSnapshot.exists()) {
         if (interactive?.type === "button_reply") {
@@ -186,7 +205,7 @@ async function handleIncomingMessage(phoneId: string, message: any, contacts: an
       } else {
         console.log(`⚠️ No visual flow published for ${phoneId}. Skipping Flow Engine.`);
       }
-    } else {
+    } else if (isAiBotActive) {
       console.log(`🤖 AI Bot is active for ${phoneId}. Skipping visual Flow Engine.`);
       // Future me Gemini AI ka code yahan aayega
     }
@@ -198,23 +217,54 @@ async function handleIncomingMessage(phoneId: string, message: any, contacts: an
 // ─── Handle Status Update ───
 async function handleStatusUpdate(phoneId: string, status: any) {
   const recipientPhone = status.recipient_id;
-  const metaId = status.id;
+  const metaId = status.id; // Meta ka diya hua ID, jo pehle humare DB me save nahi hota tha.
   const newStatus = status.status; // 'sent', 'delivered', 'read', 'failed'
   const timestamp = parseInt(status.timestamp) * 1000;
 
   const messagesRef = db.ref(`chats/${phoneId}/${recipientPhone}/messages`);
-  const snapshot = await messagesRef.orderByChild("metaId").equalTo(metaId).once("value");
+  
+  // FIX FOR STATUS TICKS:
+  // Kyunki hum UI se bhejte waqt Firebase ka Push ID save karte hain aur usme 'metaId' property blank rehti hai, 
+  // isliye hum directly us incoming update ko assign kar dete hain jo message 'me' (humne) bheja hai aur sabse recent hai
+  
+  const snapshot = await messagesRef.orderByChild("sender").equalTo("me").limitToLast(5).once("value");
 
   if (snapshot.exists()) {
+    let targetMessageRef = null;
+    let foundByMetaId = false;
+
     snapshot.forEach((childSnapshot) => {
-      childSnapshot.ref.update({
-        status: newStatus,
-        statusTimestamp: timestamp,
-      });
+      const msgData = childSnapshot.val();
+      // Pehle dekhte hain ki kya metaId match hota hai (agar pehle update aake save hua ho)
+      if (msgData.metaId === metaId) {
+         targetMessageRef = childSnapshot.ref;
+         foundByMetaId = true;
+      }
     });
-    console.log(`📊 Status: ${newStatus} for msg ${metaId}`);
+
+    if (!foundByMetaId) {
+      // Agar metaId se match nahi mila, to sabse aakhri aisa message dhundo jiska status 'sent' ya 'delivered' ho aur naya aane wala status update kardo
+       snapshot.forEach((childSnapshot) => {
+          const msgData = childSnapshot.val();
+          if(msgData.status !== "read" && msgData.status !== newStatus) {
+              targetMessageRef = childSnapshot.ref; // Latest outgoing message pakdo
+          }
+       });
+    }
+
+    if (targetMessageRef) {
+       await targetMessageRef.update({
+          status: newStatus,
+          metaId: metaId, // Aage ke updates (jaise 'read') ke liye metaId ab save ho jayega!
+          statusTimestamp: timestamp,
+       });
+       console.log(`📊 Updated Status to [${newStatus}] for user ${recipientPhone}`);
+    } else {
+       console.log(`⚠️ Status target message not found for ${recipientPhone}, might be fully read or too old.`);
+    }
+
   } else {
-    console.log(`⚠️ Message with metaId ${metaId} not found, may need sync`);
+    console.log(`⚠️ No outgoing messages found for ${recipientPhone} to apply status update.`);
   }
 
   if (newStatus === "failed" && status.errors) {
