@@ -64,10 +64,11 @@ export default function ChatPage() {
   const [activeContact, setActiveContact] = useState<Contact | null>(null);
 
   useEffect(() => {
-    if (!user) return;
-    const unsub = listenToContacts(user.uid, setContacts);
+    // NAYA: Ab contacts phoneId ke basis par load honge
+    if (!config?.phoneId) return;
+    const unsub = listenToContacts(config.phoneId, setContacts);
     return () => unsub();
-  }, [user]);
+  }, [config?.phoneId]);
 
   // Keep the active contact's live fields (unread, lastMessage) in sync
   // as the contacts list updates in real time.
@@ -91,14 +92,15 @@ export default function ChatPage() {
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!user || !activeContact) {
+    // NAYA: Messages bhi phoneId ke basis par load/read honge
+    if (!config?.phoneId || !activeContact) {
       setMessages([]);
       return;
     }
-    const unsub = listenToChat(user.uid, activeContact.id, setMessages);
-    markContactRead(user.uid, activeContact.id).catch(() => {});
+    const unsub = listenToChat(config.phoneId, activeContact.id, setMessages);
+    markContactRead(config.phoneId, activeContact.id).catch(() => {});
     return () => unsub();
-  }, [user, activeContact?.id]);
+  }, [config?.phoneId, activeContact?.id]);
 
   useEffect(() => {
     if (chatContainerRef.current) {
@@ -112,8 +114,8 @@ export default function ChatPage() {
     : DEFAULT_WALLPAPER;
 
   const handleThemeChange = async (theme: ChatTheme) => {
-    if (!user || !activeContact) return;
-    await setContactWallpaper(user.uid, activeContact.id, theme.id);
+    if (!config?.phoneId || !activeContact) return;
+    await setContactWallpaper(config.phoneId, activeContact.id, theme.id);
   };
 
   // ─── Guard: everything below requires a logged-in user + active contact ─
@@ -126,11 +128,12 @@ export default function ChatPage() {
       alert("Select a conversation first.");
       return null;
     }
-    if (!config) {
+    if (!config || !config.phoneId) {
       alert("Meta API credentials missing. Please configure them in Settings.");
       return null;
     }
-    return { uid: user.uid, contactId: activeContact.id, recipientPhone: activeContact.phone, config };
+    // NAYA: uid ki jagah phoneId, aur phone ki jagah phoneNumber || ""
+    return { phoneId: config.phoneId, contactId: activeContact.id, recipientPhone: activeContact.phoneNumber || "", config };
   };
 
   // ─── Send actions — all delegate to chatLogic, no direct API calls here ─
@@ -188,22 +191,22 @@ export default function ChatPage() {
   // ─── Message management ─────────────────────────────────────────────────
 
   const handleDeleteSingle = async (id: string) => {
-    if (!user || !activeContact) return;
-    await deleteMessageFromFirebase(user.uid, activeContact.id, id);
+    if (!config?.phoneId || !activeContact) return;
+    await deleteMessageFromFirebase(config.phoneId, activeContact.id, id);
   };
 
   const handleClearAll = async () => {
-    if (!user || !activeContact) return;
+    if (!config?.phoneId || !activeContact) return;
     if (window.confirm("Are you sure you want to clear this entire chat?")) {
-      await clearChatInFirebase(user.uid, activeContact.id);
+      await clearChatInFirebase(config.phoneId, activeContact.id);
       setShowMenu(false);
     }
   };
 
   const handleBulkDelete = async () => {
-    if (!user || !activeContact) return;
+    if (!config?.phoneId || !activeContact) return;
     if (window.confirm(`Delete ${selectedIds.length} selected messages?`)) {
-      await deleteMessagesFromFirebase(user.uid, activeContact.id, selectedIds);
+      await deleteMessagesFromFirebase(config.phoneId, activeContact.id, selectedIds);
       setSelectedIds([]);
     }
   };
@@ -276,7 +279,8 @@ export default function ChatPage() {
                     </div>
                     <div className="flex flex-col min-w-0">
                       <span className="font-semibold text-[16px] leading-tight truncate">{activeContact.name}</span>
-                      <span className="text-[12px] text-white/80">{activeContact.phone}</span>
+                      {/* NAYA: phone ki jagah phoneNumber */}
+                      <span className="text-[12px] text-white/80">{activeContact.phoneNumber}</span>
                     </div>
                   </div>
 
@@ -346,7 +350,7 @@ export default function ChatPage() {
 
             {/* Floating Chat Input */}
             <ChatInput
-              uid={user.uid}
+              uid={user?.uid || ""}
               inputText={inputText}
               setInputText={setInputText}
               onSend={handleSendText}
