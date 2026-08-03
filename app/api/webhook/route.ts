@@ -1,15 +1,19 @@
 import { NextResponse } from "next/server";
-import * as admin from "firebase-admin";
+import { initializeApp, getApps, cert } from "firebase-admin/app";
+import { getDatabase } from "firebase-admin/database";
 import { runFlowEngine } from "@/lib/whatsapp/engine";
-// 👇 NAYA CODE: Prisma ko import kiya aur uska nick-name 'prisma' rakh diya
-import { db as prisma } from "@/prisma/lib/db"; 
 
-// ─── Initialize Firebase Admin ───
-if (!admin.apps.length) {
+// ─── 1. Safe Firebase Admin Initialization ───
+if (!getApps().length) {
+  const serviceAccount = {
+    projectId: process.env.FIREBASE_PROJECT_ID,
+    clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+    privateKey: process.env.FIREBASE_SERVICE_ACCOUNT_KEY?.replace(/\\n/g, '\n'),
+  };
+
   try {
-    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY as string);
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount),
+    initializeApp({
+      credential: cert(serviceAccount),
       databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL,
     });
   } catch (error) {
@@ -17,8 +21,7 @@ if (!admin.apps.length) {
   }
 }
 
-// Firebase yahan 'db' naam se use hoga
-const db = admin.database();
+const db = getDatabase();
 
 // ─── GET: Webhook Verification (Dynamic Database Check) ───
 export async function GET(req: Request) {
@@ -29,12 +32,10 @@ export async function GET(req: Request) {
 
   if (mode === "subscribe" && token) {
     try {
-      // Firebase डेटाबेस में चेक करो कि क्या यह टोकन किसी यूज़र के config में है?
       const usersRef = db.ref("users");
       const snapshot = await usersRef.orderByChild("config/webhookVerifyToken").equalTo(token).once("value");
 
       if (snapshot.exists()) {
-        // टोकन मिल गया! मतलब यह हमारा ही कोई क्लाइंट है।
         snapshot.forEach((childSnapshot) => {
           childSnapshot.ref.child("config").update({
             isWebhookVerified: true
@@ -44,7 +45,6 @@ export async function GET(req: Request) {
         console.log(`✅ Webhook Verified for a user with token: ${token}`);
         return new Response(challenge, { status: 200 });
       } else {
-        // टोकन डेटाबेस में नहीं मिला
         console.warn(`❌ Webhook Verification Failed: Token not found in database.`);
         return new Response("Forbidden: Invalid Token", { status: 403 });
       }
@@ -112,131 +112,39 @@ async function handleIncomingMessage(phoneId: string, message: any, contacts: an
   const timestamp = parseInt(message.timestamp) * 1000;
   const messageType = message.type;
 
-  let text = "";
-  let mediaUrl = null;
-  let mediaType = null;
-  let caption = null;
-  let location = null;
-  let interactive = null;
-  let button = null;
+  let text = "", mediaUrl = null, mediaType = null, caption = null, location = null, interactive = null, button = null;
 
   switch (messageType) {
-    case "text":
-      text = message.text?.body || "";
-      break;
-
-    case "image":
-      mediaType = "image";
-      mediaUrl = message.image?.id;
-      caption = message.image?.caption;
-      text = caption || "📷 Image";
-      break;
-
-    case "video":
-      mediaType = "video";
-      mediaUrl = message.video?.id;
-      caption = message.video?.caption;
-      text = caption || "🎥 Video";
-      break;
-
-    case "audio":
-      mediaType = "audio";
-      mediaUrl = message.audio?.id;
-      text = "🎵 Audio message";
-      break;
-
-    case "voice":
-      mediaType = "voice";
-      mediaUrl = message.voice?.id;
-      text = "🎤 Voice message";
-      break;
-
-    case "document":
-      mediaType = "document";
-      mediaUrl = message.document?.id;
-      caption = message.document?.caption;
-      text = caption || `📄 ${message.document?.filename || "Document"}`;
-      break;
-
-    case "sticker":
-      mediaType = "sticker";
-      mediaUrl = message.sticker?.id;
-      text = "😀 Sticker";
-      break;
-
-    case "location":
-      location = {
-        latitude: message.location?.latitude,
-        longitude: message.location?.longitude,
-        name: message.location?.name,
-        address: message.location?.address,
-      };
-      text = `📍 Location: ${location.name || `${location.latitude}, ${location.longitude}`}`;
-      break;
-
-    case "contacts":
-      text = "👤 Shared contact";
-      break;
-
-    case "button":
-      button = {
-        payload: message.button?.payload,
-        text: message.button?.text,
-      };
-      text = `▶️ ${button.text || "Button clicked"}`;
-      break;
-
+    case "text": text = message.text?.body || ""; break;
+    case "image": mediaType = "image"; mediaUrl = message.image?.id; caption = message.image?.caption; text = caption || "📷 Image"; break;
+    case "video": mediaType = "video"; mediaUrl = message.video?.id; caption = message.video?.caption; text = caption || "🎥 Video"; break;
+    case "audio": mediaType = "audio"; mediaUrl = message.audio?.id; text = "🎵 Audio message"; break;
+    case "voice": mediaType = "voice"; mediaUrl = message.voice?.id; text = "🎤 Voice message"; break;
+    case "document": mediaType = "document"; mediaUrl = message.document?.id; caption = message.document?.caption; text = caption || `📄 ${message.document?.filename || "Document"}`; break;
+    case "sticker": mediaType = "sticker"; mediaUrl = message.sticker?.id; text = "😀 Sticker"; break;
+    case "location": location = { latitude: message.location?.latitude, longitude: message.location?.longitude, name: message.location?.name, address: message.location?.address }; text = `📍 Location: ${location.name || `${location.latitude}, ${location.longitude}`}`; break;
+    case "contacts": text = "👤 Shared contact"; break;
+    case "button": button = { payload: message.button?.payload, text: message.button?.text }; text = `▶️ ${button.text || "Button clicked"}`; break;
     case "interactive":
       if (message.interactive?.type === "button_reply") {
-        interactive = {
-          type: "button_reply",
-          id: message.interactive.button_reply?.id,
-          title: message.interactive.button_reply?.title,
-        };
+        interactive = { type: "button_reply", id: message.interactive.button_reply?.id, title: message.interactive.button_reply?.title };
         text = `🔘 ${interactive.title || "Button reply"}`;
       } else if (message.interactive?.type === "list_reply") {
-        interactive = {
-          type: "list_reply",
-          id: message.interactive.list_reply?.id,
-          title: message.interactive.list_reply?.title,
-          description: message.interactive.list_reply?.description,
-        };
+        interactive = { type: "list_reply", id: message.interactive.list_reply?.id, title: message.interactive.list_reply?.title, description: message.interactive.list_reply?.description };
         text = `📋 ${interactive.title || "List selection"}`;
       }
       break;
-
-    case "order":
-      text = "🛒 Order received";
-      break;
-
-    case "system":
-      text = "⚙️ System message";
-      break;
-
-    case "reaction":
-      text = `👍 Reacted: ${message.reaction?.emoji || ""}`;
-      break;
-
-    default:
-      text = `📎 ${messageType} message`;
+    case "order": text = "🛒 Order received"; break;
+    case "system": text = "⚙️ System message"; break;
+    case "reaction": text = `👍 Reacted: ${message.reaction?.emoji || ""}`; break;
+    default: text = `📎 ${messageType} message`;
   }
 
-  // Save message to Firebase (using 'db')
+  // Save message to Firebase
   const chatRef = db.ref(`chats/${phoneId}/${senderPhone}/messages`);
   await chatRef.push({
-    metaId: messageId,
-    text,
-    sender: "them",
-    time: new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-    timestamp,
-    status: "received",
-    messageType,
-    mediaUrl,
-    mediaType,
-    caption,
-    location,
-    interactive,
-    button,
+    metaId: messageId, text, sender: "them", time: new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    timestamp, status: "received", messageType, mediaUrl, mediaType, caption, location, interactive, button,
   });
 
   // Update contact info in Firebase
@@ -254,30 +162,35 @@ async function handleIncomingMessage(phoneId: string, message: any, contacts: an
 
   console.log(`📩 [${messageType}] From ${senderName} (${senderPhone}): ${text.substring(0, 60)}`);
 
-  // ─── 🔌 D. HAND OFF TO THE FLOW ENGINE ───
+  // ─── 🔌 D. HAND OFF TO THE FLOW ENGINE (100% Firebase Now) ───
   try {
-    // 👇 NAYA CODE: Check if AI Bot is active using Prisma
-    const settings = await prisma.systemSettings.findUnique({ where: { id: "main_settings" } });
+    // Check if AI Bot is active from the user's Firebase config
+    const configSnap = await db.ref(`users/${phoneId}/config`).once("value");
+    const configData = configSnap.val() || {};
+    const isAiBotActive = configData.isAiBotActive === true;
 
-    // Agar AI bot ON nahi hai, tabhi flow engine chalega
-    if (!settings?.isAiBotActive) {
-      if (interactive?.type === "button_reply") {
-        await runFlowEngine(phoneId, senderPhone, { type: "button_reply", value: interactive.id });
-      } else if (interactive?.type === "list_reply") {
-        await runFlowEngine(phoneId, senderPhone, { type: "list_reply", value: interactive.id });
-      } else if (button?.payload) {
-        // Older template quick-reply buttons come through as message.button, not message.interactive
-        await runFlowEngine(phoneId, senderPhone, { type: "button_reply", value: button.payload });
-      } else if (messageType === "text") {
-        await runFlowEngine(phoneId, senderPhone, { type: "text", value: text });
+    if (!isAiBotActive) {
+      // Check if a flow actually exists before running the engine
+      const flowSnapshot = await db.ref(`users/${phoneId}/chatFlows/main_flow`).once("value");
+      
+      if (flowSnapshot.exists()) {
+        if (interactive?.type === "button_reply") {
+          await runFlowEngine(phoneId, senderPhone, { type: "button_reply", value: interactive.id });
+        } else if (interactive?.type === "list_reply") {
+          await runFlowEngine(phoneId, senderPhone, { type: "list_reply", value: interactive.id });
+        } else if (button?.payload) {
+          await runFlowEngine(phoneId, senderPhone, { type: "button_reply", value: button.payload });
+        } else if (messageType === "text") {
+          await runFlowEngine(phoneId, senderPhone, { type: "text", value: text });
+        }
+      } else {
+        console.log(`⚠️ No visual flow published for ${phoneId}. Skipping Flow Engine.`);
       }
     } else {
-      console.log(`🤖 AI Bot is active. Skipping visual Flow Engine for ${senderPhone}.`);
+      console.log(`🤖 AI Bot is active for ${phoneId}. Skipping visual Flow Engine.`);
       // Future me Gemini AI ka code yahan aayega
     }
   } catch (engineError) {
-    // Flow engine failing should NEVER break webhook ack — Meta doesn't care about your bot logic,
-    // it just wants 200 back. Log it and move on.
     console.error("Flow engine error:", engineError);
   }
 }
@@ -289,7 +202,6 @@ async function handleStatusUpdate(phoneId: string, status: any) {
   const newStatus = status.status; // 'sent', 'delivered', 'read', 'failed'
   const timestamp = parseInt(status.timestamp) * 1000;
 
-  // Find message by metaId and update status in Firebase
   const messagesRef = db.ref(`chats/${phoneId}/${recipientPhone}/messages`);
   const snapshot = await messagesRef.orderByChild("metaId").equalTo(metaId).once("value");
 
@@ -305,7 +217,6 @@ async function handleStatusUpdate(phoneId: string, status: any) {
     console.log(`⚠️ Message with metaId ${metaId} not found, may need sync`);
   }
 
-  // If failed, log error details
   if (newStatus === "failed" && status.errors) {
     for (const error of status.errors) {
       console.error(`❌ Message failed: ${error.code} - ${error.title} - ${error.message}`);
