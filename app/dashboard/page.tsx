@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import Sidebar from "@/components/Sidebar"; 
 import { 
   Users, Send, CheckCircle2, Sparkles, Bot, 
   Activity, ArrowDownToLine, ArrowUpFromLine, Key,
-  TrendingUp, TrendingDown // Naye Icons Trend ke liye
+  TrendingUp, TrendingDown, RefreshCw, FileText, MapPin, 
+  Image as ImageIcon, Mic, MessageSquare, Video, Sticker, Globe
 } from "lucide-react";
 import { auth } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
@@ -14,14 +15,17 @@ import {
   PieChart, Pie, Cell, BarChart, Bar, Legend
 } from 'recharts';
 
-const PIE_COLORS = ['#3B82F6', '#8B5CF6', '#F59E0B', '#10B981', '#EC4899', '#6366F1', '#14B8A6'];
+// Premium Light Mode Colors
+const PIE_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#14B8A6', '#6366F1'];
 
 export default function DashboardPage() {
+  const [userName, setUserName] = useState("Ayush");
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [timeRange, setTimeRange] = useState("7d"); // 24h, 7d, 15d, 30d
   
-  // Real Data State (Zero Dummy Data)
-  const [data, setData] = useState({
+  // 100% Real Data State (Zero Dummy)
+  const [data, setData] = useState<any>({
     contacts: { total: 0, google: 0, csv: 0, manual: 0 },
     system: { botActive: false, activeFlows: 0, approvedTemplates: 0, activeApiKeys: 0, activeSessions: 0 },
     outbound: { total: 0, read: 0, delivered: 0, sent: 0, chat: 0, flow: 0, api: 0, campaign: 0 },
@@ -31,199 +35,253 @@ export default function DashboardPage() {
     chartData: []
   });
 
-  useEffect(() => {
-    const fetchStats = async () => {
-      setLoading(true);
-      try {
-        const res = await fetch(`/api/dashboard-stats?range=${timeRange}`);
-        if (res.ok) {
-          const stats = await res.json();
-          setData(stats);
-        }
-      } catch (error) {
-        console.error("Fetch Error:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
+  const fetchStats = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
     
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      if (currentUser) fetchStats();
-      else setLoading(false);
-    });
-    return () => unsubscribe();
+    try {
+      const res = await fetch(`/api/dashboard-stats?range=${timeRange}`);
+      if (res.ok) {
+        const stats = await res.json();
+        setData((prev: any) => ({ ...prev, ...stats }));
+      }
+    } catch (error) {
+      console.error("Fetch Error:", error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   }, [timeRange]);
 
-  // --- 🚀 CRYPTO STYLE TREND CALCULATOR (Red/Green Logic) ---
-  const { isTrendUp, trendColor, trendLight } = useMemo(() => {
-    if (data.chartData.length < 2) return { isTrendUp: true, trendColor: '#00A884', trendLight: 'rgba(0,168,132,0.4)' }; // Default Green
-    
-    const latest = data.chartData[data.chartData.length - 1] as any;
-    const previous = data.chartData[data.chartData.length - 2] as any;
-    
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      if (currentUser) {
+        setUserName(currentUser.displayName || "Ayush");
+        fetchStats();
+      } else {
+        setLoading(false);
+      }
+    });
+    return () => unsubscribe();
+  }, [fetchStats]);
+
+  // --- 🚀 TREND CALCULATOR ---
+  const { isTrendUp, trendColor } = useMemo(() => {
+    if (!data?.chartData || data.chartData.length < 2) return { isTrendUp: true, trendColor: '#00A884' }; 
+    const latest = data.chartData[data.chartData.length - 1] || {};
+    const previous = data.chartData[data.chartData.length - 2] || {};
     const isUp = (latest.sent || 0) >= (previous.sent || 0);
     return {
       isTrendUp: isUp,
-      trendColor: isUp ? '#00A884' : '#EF4444', // Upar gaya to Green, Gira to RED
-      trendLight: isUp ? 'rgba(0,168,132,0.4)' : 'rgba(239,68,68,0.4)'
+      trendColor: isUp ? '#00A884' : '#EF4444' // Green if UP, Red if DOWN
     };
-  }, [data.chartData]);
+  }, [data?.chartData]);
 
-  // Chart Formatting Data
+  // Chart Formatting Data (SAFE EXTRACT)
   const inboundPieData = [
-    { name: 'Text', value: data.inbound.text },
-    { name: 'Images', value: data.inbound.image },
-    { name: 'Docs', value: data.inbound.document },
-    { name: 'Audio/Voice', value: data.inbound.audio },
-    { name: 'Location', value: data.inbound.location },
-    { name: 'Sticker', value: data.inbound.sticker },
-    { name: 'Interactive', value: data.inbound.interactive },
+    { name: 'Text', value: data?.inbound?.text || 0, icon: <MessageSquare className="w-3 h-3"/> },
+    { name: 'Images', value: data?.inbound?.image || 0, icon: <ImageIcon className="w-3 h-3"/> },
+    { name: 'Videos', value: data?.inbound?.video || 0, icon: <Video className="w-3 h-3"/> },
+    { name: 'Documents', value: data?.inbound?.document || 0, icon: <FileText className="w-3 h-3"/> },
+    { name: 'Audio', value: data?.inbound?.audio || 0, icon: <Mic className="w-3 h-3"/> },
+    { name: 'Location', value: data?.inbound?.location || 0, icon: <MapPin className="w-3 h-3"/> },
+    { name: 'Stickers', value: data?.inbound?.sticker || 0, icon: <Sticker className="w-3 h-3"/> },
+    { name: 'Interactive', value: data?.inbound?.interactive || 0, icon: <Globe className="w-3 h-3"/> },
   ].filter(item => item.value > 0);
 
   const outboundSourceData = [
-    { name: 'Manual Chat', volume: data.outbound.chat, fill: '#00A884' },
-    { name: 'Flow Builder', volume: data.outbound.flow, fill: '#3B82F6' },
-    { name: 'Dev API', volume: data.outbound.api, fill: '#8B5CF6' },
-    { name: 'Campaign', volume: data.outbound.campaign, fill: '#F59E0B' },
+    { name: 'Manual Chat', volume: data?.outbound?.chat || 0, fill: '#00A884' },
+    { name: 'Flow Builder', volume: data?.outbound?.flow || 0, fill: '#3B82F6' },
+    { name: 'API Triggers', volume: data?.outbound?.api || 0, fill: '#8B5CF6' },
+    { name: 'Campaigns', volume: data?.outbound?.campaign || 0, fill: '#F59E0B' },
   ].filter(item => item.volume > 0);
 
   return (
-    <div className="flex h-[100dvh] w-full bg-[#0B0E14] text-white overflow-hidden pb-[70px] md:pb-0 font-sans relative selection:bg-blue-500/30">
+    <div className="flex h-[100dvh] w-full bg-[#F3F4F6] text-gray-900 overflow-hidden pb-[70px] md:pb-0 font-sans relative selection:bg-green-100">
+      
+      {/* Sidebar */}
       <div className="shrink-0 z-50">
         <Sidebar />
       </div>
 
       <div className="flex-1 flex flex-col h-full relative overflow-y-auto scroll-smooth no-scrollbar">
         
-        {/* Header with Time Range Toggle */}
-        <div className="bg-[#121824]/90 backdrop-blur-md border-b border-gray-800/60 px-6 py-5 flex flex-col md:flex-row md:items-center justify-between gap-4 sticky top-0 z-40">
+        {/* --- 🌟 HEADER WITH REFRESH & FILTERS --- */}
+        <div className="bg-white/80 backdrop-blur-xl border-b border-gray-200 px-6 py-5 flex flex-col md:flex-row md:items-center justify-between gap-4 sticky top-0 z-40 shadow-sm">
           <div>
-            <h1 className="text-2xl font-black flex items-center gap-2">
-              <Activity className="w-6 h-6 text-[#00A884]" /> Command Center
+            <h1 className="text-2xl font-black flex items-center gap-2 text-gray-800 tracking-tight">
+              <Activity className="w-7 h-7 text-[#00A884]" /> Command Center
             </h1>
+            <p className="text-sm text-gray-500 mt-1">
+              Welcome back, <span className="font-bold text-gray-700">{userName}</span>. Here is your highly detailed WhatsApp API report.
+            </p>
           </div>
           
-          <div className="flex bg-[#0B0E14] p-1 rounded-xl border border-gray-800">
-            {/* 15 Days filter add kiya gaya hai */}
-            {['24h', '7d', '15d', '30d'].map((range) => (
-              <button 
-                key={range}
-                onClick={() => setTimeRange(range)}
-                className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${
-                  timeRange === range ? 'bg-[#3B82F6] text-white shadow-[0_0_15px_rgba(59,130,246,0.3)]' : 'text-gray-500 hover:text-gray-300'
-                }`}
-              >
-                {range.toUpperCase()}
-              </button>
-            ))}
+          <div className="flex items-center gap-3">
+            {/* Refresh Button */}
+            <button 
+              onClick={() => fetchStats(true)} 
+              className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold text-sm transition-all shadow-sm border border-gray-200 active:scale-95"
+            >
+              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin text-[#00A884]' : ''}`} />
+              {refreshing ? 'Syncing...' : 'Refresh'}
+            </button>
+
+            {/* Time Toggle */}
+            <div className="flex bg-gray-100 p-1 rounded-xl border border-gray-200 shadow-inner">
+              {['24h', '7d', '15d', '30d'].map((range) => (
+                <button 
+                  key={range}
+                  onClick={() => setTimeRange(range)}
+                  className={`px-4 py-1.5 rounded-lg text-sm font-black transition-all ${
+                    timeRange === range 
+                      ? 'bg-white text-[#00A884] shadow-sm border border-gray-200' 
+                      : 'text-gray-500 hover:text-gray-800'
+                  }`}
+                >
+                  {range.toUpperCase()}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
         <div className="p-4 md:p-6 max-w-[1600px] mx-auto w-full flex-1 flex flex-col gap-6">
           
-          {/* Top Quick Stats Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* --- 📊 TOP KPI CARDS --- */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
             
-            {/* Outbound Sent */}
-            <div className="bg-[#121824] p-5 rounded-2xl border border-gray-800 shadow-lg relative overflow-hidden group hover:border-gray-600 transition-colors">
-              <div className="absolute top-0 right-0 w-24 h-24 bg-[#00A884] opacity-5 rounded-full blur-2xl group-hover:opacity-10 transition-opacity"></div>
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-[#00A884]/10 text-[#00A884] rounded-lg flex items-center justify-center">
-                  <ArrowUpFromLine className="w-5 h-5" />
+            {/* 1. Outbound (Cascading Read/Delivered Fixed) */}
+            <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
+              <div className="absolute -top-10 -right-10 w-32 h-32 bg-[#00A884] opacity-5 rounded-full blur-2xl group-hover:opacity-10 transition-opacity"></div>
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-12 h-12 bg-green-50 text-[#00A884] rounded-xl flex items-center justify-center border border-green-100">
+                  <ArrowUpFromLine className="w-6 h-6" />
                 </div>
-                <div>
-                  <p className="text-[11px] text-gray-500 font-bold uppercase tracking-wider">Outbound Volume</p>
-                  <h3 className="text-3xl font-black">{loading ? "..." : data.outbound.total}</h3>
-                </div>
+                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest bg-gray-50 px-2 py-1 rounded">Outbound</span>
               </div>
-              <div className="mt-5 flex gap-2 text-[10px] font-bold">
-                <span className="bg-[#8B5CF6]/10 text-[#8B5CF6] border border-[#8B5CF6]/20 px-2.5 py-1 rounded-md">Read: {data.outbound.read}</span>
-                <span className="bg-[#3B82F6]/10 text-[#3B82F6] border border-[#3B82F6]/20 px-2.5 py-1 rounded-md">Delivered: {data.outbound.delivered}</span>
+              <div>
+                <h3 className="text-4xl font-black text-gray-800">{loading ? "..." : (data?.outbound?.total || 0)}</h3>
+                <p className="text-sm font-bold text-gray-500 mt-1">Total Messages Sent</p>
               </div>
-            </div>
-
-            {/* Inbound Received */}
-            <div className="bg-[#121824] p-5 rounded-2xl border border-gray-800 shadow-lg relative overflow-hidden group hover:border-gray-600 transition-colors">
-              <div className="absolute top-0 right-0 w-24 h-24 bg-[#3B82F6] opacity-5 rounded-full blur-2xl group-hover:opacity-10 transition-opacity"></div>
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-[#3B82F6]/10 text-[#3B82F6] rounded-lg flex items-center justify-center">
-                  <ArrowDownToLine className="w-5 h-5" />
+              <div className="mt-5 grid grid-cols-3 gap-2 text-center text-[11px] font-bold">
+                <div className="bg-gray-50 py-1.5 rounded-lg border border-gray-100">
+                  <span className="text-gray-400 block text-[9px] uppercase">Sent</span>
+                  <span className="text-gray-700">{data?.outbound?.sent || 0}</span>
                 </div>
-                <div>
-                  <p className="text-[11px] text-gray-500 font-bold uppercase tracking-wider">Inbound Received</p>
-                  <h3 className="text-3xl font-black">{loading ? "..." : data.inbound.total}</h3>
+                <div className="bg-blue-50 py-1.5 rounded-lg border border-blue-100">
+                  <span className="text-blue-400 block text-[9px] uppercase">Delivered</span>
+                  <span className="text-blue-600">{data?.outbound?.delivered || 0}</span>
                 </div>
-              </div>
-              <div className="mt-5 flex gap-2 text-[10px] font-bold">
-                <span className="bg-gray-800 text-gray-300 border border-gray-700 px-2.5 py-1 rounded-md">Text: {data.inbound.text}</span>
-                <span className="bg-[#F59E0B]/10 text-[#F59E0B] border border-[#F59E0B]/20 px-2.5 py-1 rounded-md">Media: {data.inbound.image + data.inbound.video + data.inbound.document}</span>
+                <div className="bg-purple-50 py-1.5 rounded-lg border border-purple-100">
+                  <span className="text-purple-400 block text-[9px] uppercase">Read</span>
+                  <span className="text-purple-600">{data?.outbound?.read || 0}</span>
+                </div>
               </div>
             </div>
 
-            {/* Contacts */}
-            <div className="bg-[#121824] p-5 rounded-2xl border border-gray-800 shadow-lg relative overflow-hidden group hover:border-gray-600 transition-colors">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-[#EC4899]/10 text-[#EC4899] rounded-lg flex items-center justify-center">
-                  <Users className="w-5 h-5" />
+            {/* 2. Inbound Received */}
+            <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
+              <div className="absolute -top-10 -right-10 w-32 h-32 bg-[#3B82F6] opacity-5 rounded-full blur-2xl group-hover:opacity-10 transition-opacity"></div>
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-12 h-12 bg-blue-50 text-[#3B82F6] rounded-xl flex items-center justify-center border border-blue-100">
+                  <ArrowDownToLine className="w-6 h-6" />
                 </div>
-                <div>
-                  <p className="text-[11px] text-gray-500 font-bold uppercase tracking-wider">Total CRM Leads</p>
-                  <h3 className="text-3xl font-black">{loading ? "..." : data.contacts.total}</h3>
-                </div>
+                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest bg-gray-50 px-2 py-1 rounded">Inbound</span>
               </div>
-              <div className="mt-5 flex gap-2 text-[10px] font-bold">
-                <span className="bg-gray-800 text-gray-400 border border-gray-700 px-2.5 py-1 rounded-md">API/CSV: {data.contacts.csv}</span>
-                <span className="bg-gray-800 text-gray-400 border border-gray-700 px-2.5 py-1 rounded-md">Google: {data.contacts.google}</span>
+              <div>
+                <h3 className="text-4xl font-black text-gray-800">{loading ? "..." : (data?.inbound?.total || 0)}</h3>
+                <p className="text-sm font-bold text-gray-500 mt-1">Total Messages Received</p>
+              </div>
+              <div className="mt-5 flex gap-2 text-[11px] font-bold">
+                <span className="bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg flex-1 text-center border border-gray-200">
+                  Text: {data?.inbound?.text || 0}
+                </span>
+                <span className="bg-orange-50 text-orange-600 px-3 py-1.5 rounded-lg flex-1 text-center border border-orange-200">
+                  Media: {(data?.inbound?.image || 0) + (data?.inbound?.video || 0) + (data?.inbound?.document || 0) + (data?.inbound?.audio || 0)}
+                </span>
               </div>
             </div>
 
-            {/* Read Rate */}
-            <div className="bg-[#121824] p-5 rounded-2xl border border-gray-800 shadow-lg relative overflow-hidden group hover:border-gray-600 transition-colors">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-[#10B981]/10 text-[#10B981] rounded-lg flex items-center justify-center">
-                  <CheckCircle2 className="w-5 h-5" />
+            {/* 3. CRM Leads */}
+            <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-12 h-12 bg-pink-50 text-[#EC4899] rounded-xl flex items-center justify-center border border-pink-100">
+                  <Users className="w-6 h-6" />
                 </div>
-                <div>
-                  <p className="text-[11px] text-gray-500 font-bold uppercase tracking-wider">Conversion Rate</p>
-                  <h3 className="text-3xl font-black">{loading ? "..." : `${data.readRate}%`}</h3>
+                <span className="text-[10px] font-black text-green-600 bg-green-50 border border-green-200 px-2 py-1 rounded flex items-center gap-1">
+                  <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div> Live
+                </span>
+              </div>
+              <div>
+                <h3 className="text-4xl font-black text-gray-800">{loading ? "..." : (data?.contacts?.total || 0)}</h3>
+                <p className="text-sm font-bold text-gray-500 mt-1">Total Unique Contacts</p>
+              </div>
+              <div className="mt-5 grid grid-cols-2 gap-2 text-center text-[11px] font-bold">
+                <div className="bg-gray-50 py-1.5 rounded-lg border border-gray-100">
+                  <span className="text-gray-400 block text-[9px] uppercase">Google Sync</span>
+                  <span className="text-gray-700">{data?.contacts?.google || 0}</span>
+                </div>
+                <div className="bg-gray-50 py-1.5 rounded-lg border border-gray-100">
+                  <span className="text-gray-400 block text-[9px] uppercase">CSV / API</span>
+                  <span className="text-gray-700">{data?.contacts?.csv || 0}</span>
                 </div>
               </div>
-              <div className="w-full bg-gray-800/50 rounded-full h-1.5 mt-6 overflow-hidden">
-                <div className="bg-gradient-to-r from-[#10B981] to-[#00A884] h-1.5 rounded-full" style={{ width: `${data.readRate}%` }}></div>
+            </div>
+
+            {/* 4. Conversion / Read Rate */}
+            <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="w-12 h-12 bg-green-50 text-[#10B981] rounded-xl flex items-center justify-center border border-green-100">
+                    <CheckCircle2 className="w-6 h-6" />
+                  </div>
+                </div>
+                <h3 className="text-4xl font-black text-gray-800">{loading ? "..." : `${data?.readRate || 0}%`}</h3>
+                <p className="text-sm font-bold text-gray-500 mt-1">Average Read Rate</p>
+              </div>
+              <div className="mt-5">
+                <div className="flex justify-between text-[10px] font-bold text-gray-400 mb-1">
+                  <span>0%</span>
+                  <span>Based on Delivered</span>
+                  <span>100%</span>
+                </div>
+                <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden border border-gray-200">
+                  <div className="bg-gradient-to-r from-[#10B981] to-[#00A884] h-full rounded-full transition-all duration-1000" style={{ width: `${data?.readRate || 0}%` }}></div>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* 📈 CRYPTO STYLE MAIN GRAPH (Green if UP, Red if DOWN) */}
-          <div className="bg-[#121824] p-6 rounded-2xl border border-gray-800 shadow-xl relative">
+          {/* --- 📈 MAIN MESSAGE TRAFFIC GRAPH --- */}
+          <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm relative">
             <div className="mb-6 flex justify-between items-start">
               <div>
-                <h3 className="text-xl font-black text-white flex items-center gap-2">
-                  Message Traffic 
-                  {/* Trend Indicator */}
-                  {!loading && data.chartData.length >= 2 && (
-                    <span className={`flex items-center text-xs px-2 py-1 rounded border ${isTrendUp ? 'bg-green-500/10 text-green-400 border-green-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'}`}>
-                      {isTrendUp ? <TrendingUp className="w-3 h-3 mr-1" /> : <TrendingDown className="w-3 h-3 mr-1" />}
-                      {isTrendUp ? 'Growing' : 'Dropping'}
+                <h3 className="text-xl font-black text-gray-800 flex items-center gap-3">
+                  Message Traffic Over Time
+                  {/* Smart Trend Indicator */}
+                  {!loading && data?.chartData?.length >= 2 && (
+                    <span className={`flex items-center text-xs px-2.5 py-1 rounded-full border font-bold ${isTrendUp ? 'bg-green-50 text-green-600 border-green-200' : 'bg-red-50 text-red-600 border-red-200'}`}>
+                      {isTrendUp ? <TrendingUp className="w-3.5 h-3.5 mr-1" /> : <TrendingDown className="w-3.5 h-3.5 mr-1" />}
+                      {isTrendUp ? 'Upward Trend' : 'Downward Trend'}
                     </span>
                   )}
                 </h3>
-                <p className="text-xs text-gray-500 font-bold uppercase mt-1">Timeline: {timeRange.toUpperCase()}</p>
+                <p className="text-xs text-gray-500 font-bold uppercase mt-1 tracking-widest">Selected Timeline: {timeRange.toUpperCase()}</p>
               </div>
             </div>
             
-            <div className="h-[320px] w-full">
+            <div className="h-[350px] w-full mt-4">
               {loading ? (
-                <div className="w-full h-full flex items-center justify-center text-gray-600 font-bold animate-pulse">Scanning Blocks...</div>
-              ) : data.chartData.length === 0 ? (
-                <div className="w-full h-full flex items-center justify-center text-gray-600 font-bold">No activity in this period.</div>
+                <div className="w-full h-full flex items-center justify-center text-gray-400 font-bold animate-pulse">Extracting Data...</div>
+              ) : !data?.chartData || data.chartData.length === 0 ? (
+                <div className="w-full h-full flex items-center justify-center text-gray-400 font-bold">No activity in this period.</div>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={data.chartData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
+                  <AreaChart data={data.chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                     <defs>
-                      {/* DYNAMIC TREND GRADIENT (Red ya Green) */}
                       <linearGradient id="trendGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor={trendColor} stopOpacity={0.5}/>
+                        <stop offset="5%" stopColor={trendColor} stopOpacity={0.3}/>
                         <stop offset="95%" stopColor={trendColor} stopOpacity={0}/>
                       </linearGradient>
                       <linearGradient id="inboundGradient" x1="0" y1="0" x2="0" y2="1">
@@ -231,99 +289,154 @@ export default function DashboardPage() {
                         <stop offset="95%" stopColor="#3B82F6" stopOpacity={0}/>
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#1E293B" />
-                    <XAxis dataKey="date" tick={{fontSize: 10, fill: '#64748b', fontWeight: 'bold'}} axisLine={false} tickLine={false} dy={10} />
-                    <YAxis tick={{fontSize: 10, fill: '#64748b', fontWeight: 'bold'}} axisLine={false} tickLine={false} />
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
+                    <XAxis dataKey="date" tick={{fontSize: 11, fill: '#6B7280', fontWeight: 'bold'}} axisLine={false} tickLine={false} dy={10} />
+                    <YAxis tick={{fontSize: 11, fill: '#6B7280', fontWeight: 'bold'}} axisLine={false} tickLine={false} />
                     <Tooltip 
-                      contentStyle={{ backgroundColor: '#0B0E14', border: '1px solid #1E293B', borderRadius: '8px', color: '#fff', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }} 
-                      itemStyle={{ fontWeight: 'bold' }}
+                      contentStyle={{ backgroundColor: '#fff', border: '1px solid #E5E7EB', borderRadius: '12px', color: '#1F2937', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }} 
+                      itemStyle={{ fontWeight: 'black' }}
                     />
-                    {/* DYNAMIC STROKE COLOR FOR OUTBOUND */}
-                    <Area type="monotone" dataKey="sent" name="Outbound" stroke={trendColor} strokeWidth={3} fillOpacity={1} fill="url(#trendGradient)" activeDot={{ r: 6, fill: trendColor, stroke: '#0B0E14', strokeWidth: 2 }} />
-                    <Area type="monotone" dataKey="received" name="Inbound" stroke="#3B82F6" strokeWidth={2} fillOpacity={1} fill="url(#inboundGradient)" />
+                    <Area type="monotone" dataKey="sent" name="Outbound" stroke={trendColor} strokeWidth={3} fillOpacity={1} fill="url(#trendGradient)" activeDot={{ r: 6, fill: trendColor, stroke: '#fff', strokeWidth: 2 }} />
+                    <Area type="monotone" dataKey="received" name="Inbound" stroke="#3B82F6" strokeWidth={3} fillOpacity={1} fill="url(#inboundGradient)" />
                   </AreaChart>
                 </ResponsiveContainer>
               )}
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* --- 🧩 DEEP DIVE ANALYTICS ROW --- */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             
-            {/* Outbound Deep Breakdown (Sources) */}
-            <div className="bg-[#121824] p-6 rounded-2xl border border-gray-800 shadow-xl">
-              <h3 className="text-sm font-black text-gray-300 uppercase tracking-widest mb-1">Outbound Origins</h3>
-              <p className="text-xs text-gray-500 mb-6">Where your messages originated from</p>
-              <div className="h-[220px] w-full">
+            {/* 1. Outbound Source & Template Breakdown */}
+            <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col">
+              <h3 className="text-lg font-black text-gray-800 flex items-center gap-2">
+                <Send className="w-5 h-5 text-[#00A884]" /> Outbound Analytics
+              </h3>
+              <p className="text-xs text-gray-500 font-bold uppercase tracking-widest mt-1 mb-6">Source & Type Breakdown</p>
+              
+              {/* Template Validation Fix by Ayush */}
+              <div className="grid grid-cols-2 gap-4 mb-6">
+                 <div className="bg-green-50 p-4 rounded-xl border border-green-100 flex flex-col justify-center items-center">
+                    <p className="text-[10px] text-green-600 font-black uppercase tracking-widest mb-1">Total Templates Sent</p>
+                    <h4 className="text-3xl font-black text-green-700">{data?.types?.template || 0}</h4>
+                    <p className="text-[9px] text-green-600/70 font-bold mt-1">(Includes API & Campaigns)</p>
+                 </div>
+                 <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 flex flex-col justify-center items-center">
+                    <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest mb-1">Free Text Replies</p>
+                    <h4 className="text-3xl font-black text-gray-700">{data?.types?.text || 0}</h4>
+                    <p className="text-[9px] text-gray-400 font-bold mt-1">(Manual Chat & Flow Text)</p>
+                 </div>
+              </div>
+
+              <div className="flex-1 h-[200px] w-full">
                 {!loading && outboundSourceData.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={outboundSourceData} layout="vertical" margin={{ top: 0, right: 30, left: 30, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#1E293B" />
+                    <BarChart data={outboundSourceData} layout="vertical" margin={{ top: 0, right: 30, left: 20, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#E5E7EB" />
                       <XAxis type="number" hide />
-                      <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{fontSize: 11, fill: '#94a3b8', fontWeight: 'bold'}} />
-                      <Tooltip cursor={{fill: '#1E293B'}} contentStyle={{ backgroundColor: '#0B0E14', border: '1px solid #1E293B', borderRadius: '8px', fontWeight: 'bold' }} />
-                      <Bar dataKey="volume" radius={[0, 4, 4, 0]} barSize={20} />
+                      <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{fontSize: 12, fill: '#4B5563', fontWeight: 'bold'}} />
+                      <Tooltip cursor={{fill: '#F3F4F6'}} contentStyle={{ backgroundColor: '#fff', border: '1px solid #E5E7EB', borderRadius: '8px', fontWeight: 'bold' }} />
+                      <Bar dataKey="volume" radius={[0, 6, 6, 0]} barSize={22}>
+                         {outboundSourceData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.fill} />
+                          ))}
+                      </Bar>
                     </BarChart>
                   </ResponsiveContainer>
                 ) : (
-                  <div className="flex h-full items-center justify-center text-gray-600 font-bold text-xs uppercase tracking-widest">No outbound data</div>
+                  <div className="flex h-full items-center justify-center text-gray-400 font-bold text-xs uppercase tracking-widest">No outbound data</div>
                 )}
               </div>
             </div>
 
-            {/* Inbound Deep Breakdown (Pie) */}
-            <div className="bg-[#121824] p-6 rounded-2xl border border-gray-800 shadow-xl">
-              <h3 className="text-sm font-black text-gray-300 uppercase tracking-widest mb-1">Inbound Payload</h3>
-              <p className="text-xs text-gray-500 mb-2">What users are sending you</p>
-              <div className="h-[220px] w-full flex justify-center">
-                {!loading && inboundPieData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie data={inboundPieData} cx="50%" cy="50%" innerRadius={60} outerRadius={85} paddingAngle={4} dataKey="value" stroke="none">
-                        {inboundPieData.map((entry, index) => <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />)}
-                      </Pie>
-                      <Tooltip contentStyle={{ backgroundColor: '#0B0E14', border: '1px solid #1E293B', borderRadius: '8px', color: '#fff', fontWeight: 'bold' }} itemStyle={{ fontWeight: 'bold' }}/>
-                      <Legend iconType="circle" wrapperStyle={{ fontSize: '11px', color: '#94a3b8', fontWeight: 'bold' }} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="flex h-full items-center justify-center text-gray-600 font-bold text-xs uppercase tracking-widest">No inbound data</div>
-                )}
+            {/* 2. Inbound Format Detail (Pie Chart + Detailed List) */}
+            <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col">
+              <h3 className="text-lg font-black text-gray-800 flex items-center gap-2">
+                <ArrowDownToLine className="w-5 h-5 text-[#3B82F6]" /> Inbound Formats
+              </h3>
+              <p className="text-xs text-gray-500 font-bold uppercase tracking-widest mt-1 mb-2">Exact payload received from users</p>
+              
+              <div className="flex flex-col md:flex-row items-center gap-6 flex-1">
+                <div className="h-[220px] w-full md:w-1/2 flex justify-center mt-4">
+                  {!loading && inboundPieData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={inboundPieData} cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={3} dataKey="value" stroke="none">
+                          {inboundPieData.map((entry, index) => <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />)}
+                        </Pie>
+                        <Tooltip contentStyle={{ backgroundColor: '#fff', border: '1px solid #E5E7EB', borderRadius: '12px', color: '#1F2937', fontWeight: 'bold' }} itemStyle={{ fontWeight: 'bold' }}/>
+                      </PieChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="flex h-full items-center justify-center text-gray-400 font-bold text-xs uppercase tracking-widest">No inbound data</div>
+                  )}
+                </div>
+
+                {/* Detailed Legends for Media & Docs */}
+                <div className="w-full md:w-1/2 flex flex-col gap-2 justify-center">
+                  {inboundPieData.map((item, i) => (
+                    <div key={item.name} className="flex items-center justify-between p-2 rounded-lg bg-gray-50 border border-gray-100 hover:bg-gray-100 transition-colors">
+                      <div className="flex items-center gap-2 text-sm font-bold text-gray-700">
+                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }}></div>
+                        {item.icon} {item.name}
+                      </div>
+                      <span className="font-black text-gray-900">{item.value}</span>
+                    </div>
+                  ))}
+                  {inboundPieData.length === 0 && !loading && (
+                    <p className="text-center text-xs text-gray-400 font-bold uppercase">No records found</p>
+                  )}
+                </div>
               </div>
             </div>
           </div>
 
-          {/* System Health Status Row */}
+          {/* --- ⚙️ SYSTEM HEALTH METRICS --- */}
+          <h3 className="text-lg font-black text-gray-800 mt-4 px-2">System & Bot Infrastructure</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
-            <div className="bg-[#121824] p-4 rounded-xl border border-gray-800 flex items-center justify-between hover:bg-[#1E293B] transition-colors cursor-default">
+            
+            <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex items-center justify-between hover:border-[#00A884] transition-colors group cursor-default">
               <div>
-                <p className="text-[9px] uppercase tracking-widest text-gray-500 font-bold">Approved Templates</p>
-                <p className="text-lg font-black text-gray-200 mt-0.5">{data.system.approvedTemplates}</p>
+                <p className="text-[10px] uppercase tracking-widest text-gray-400 font-bold">Approved Templates</p>
+                <p className="text-2xl font-black text-gray-800 mt-1">{data?.system?.approvedTemplates || 0}</p>
               </div>
-              <Sparkles className="w-5 h-5 text-yellow-500/50" />
-            </div>
-            <div className="bg-[#121824] p-4 rounded-xl border border-gray-800 flex items-center justify-between hover:bg-[#1E293B] transition-colors cursor-default">
-              <div>
-                <p className="text-[9px] uppercase tracking-widest text-gray-500 font-bold">Dev API Keys</p>
-                <p className="text-lg font-black text-gray-200 mt-0.5">{data.system.activeApiKeys}</p>
+              <div className="bg-green-50 p-3 rounded-xl group-hover:scale-110 transition-transform">
+                <Sparkles className="w-6 h-6 text-[#00A884]" />
               </div>
-              <Key className="w-5 h-5 text-[#3B82F6]/50" />
             </div>
-            <div className="bg-[#121824] p-4 rounded-xl border border-gray-800 flex items-center justify-between hover:bg-[#1E293B] transition-colors cursor-default">
+            
+            <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex items-center justify-between hover:border-blue-500 transition-colors group cursor-default">
               <div>
-                <p className="text-[9px] uppercase tracking-widest text-gray-500 font-bold">Automated Flows</p>
-                <p className="text-lg font-black text-gray-200 mt-0.5">{data.system.activeFlows}</p>
+                <p className="text-[10px] uppercase tracking-widest text-gray-400 font-bold">Active API Keys</p>
+                <p className="text-2xl font-black text-gray-800 mt-1">{data?.system?.activeApiKeys || 0}</p>
               </div>
-              <Activity className="w-5 h-5 text-[#8B5CF6]/50" />
+              <div className="bg-blue-50 p-3 rounded-xl group-hover:scale-110 transition-transform">
+                <Key className="w-6 h-6 text-blue-500" />
+              </div>
             </div>
-            <div className="bg-[#121824] p-4 rounded-xl border border-gray-800 flex items-center justify-between hover:bg-[#1E293B] transition-colors cursor-default">
+            
+            <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex items-center justify-between hover:border-purple-500 transition-colors group cursor-default">
               <div>
-                <p className="text-[9px] uppercase tracking-widest text-gray-500 font-bold">AI Engine</p>
-                <p className={`text-sm font-black mt-1 ${data.system.botActive ? 'text-green-500' : 'text-red-500'}`}>
-                  {data.system.botActive ? 'ONLINE' : 'OFFLINE'}
+                <p className="text-[10px] uppercase tracking-widest text-gray-400 font-bold">Automated Flows</p>
+                <p className="text-2xl font-black text-gray-800 mt-1">{data?.system?.activeFlows || 0}</p>
+              </div>
+              <div className="bg-purple-50 p-3 rounded-xl group-hover:scale-110 transition-transform">
+                <Activity className="w-6 h-6 text-purple-500" />
+              </div>
+            </div>
+            
+            <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex items-center justify-between hover:border-orange-500 transition-colors group cursor-default">
+              <div>
+                <p className="text-[10px] uppercase tracking-widest text-gray-400 font-bold">Gemini AI Status</p>
+                <p className={`text-lg font-black mt-1 ${data?.system?.botActive ? 'text-green-600' : 'text-red-500'}`}>
+                  {data?.system?.botActive ? 'ONLINE' : 'OFFLINE'}
                 </p>
               </div>
-              <Bot className="w-5 h-5 text-gray-600" />
+              <div className={`p-3 rounded-xl group-hover:scale-110 transition-transform ${data?.system?.botActive ? 'bg-green-50' : 'bg-red-50'}`}>
+                <Bot className={`w-6 h-6 ${data?.system?.botActive ? 'text-green-500' : 'text-red-500'}`} />
+              </div>
             </div>
+
           </div>
 
         </div>
