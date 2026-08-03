@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { ArrowLeft, MoreVertical, Trash2, X, Phone, Video as VideoIcon } from "lucide-react";
+// NAYA: Phone aur VideoIcon imports yahan se hata diye gaye hain
+import { ArrowLeft, MoreVertical, Trash2, X } from "lucide-react";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { auth } from "../../lib/firebase";
 
@@ -39,6 +40,21 @@ const DEFAULT_WALLPAPER: ChatTheme = {
 };
 
 export default function ChatPage() {
+  // ─── URL Bar Hiding Logic (Mobile ke liye) ──────────────────────────────
+  useEffect(() => {
+    // Jaise hi page load ho, thoda sa scroll kardo taaki mobile browser ka URL bar upar hide ho jaye
+    const hideUrlBar = () => {
+      setTimeout(() => {
+        window.scrollTo(0, 1);
+      }, 100);
+    };
+    
+    window.addEventListener("load", hideUrlBar);
+    hideUrlBar(); // Initial call
+    
+    return () => window.removeEventListener("load", hideUrlBar);
+  }, []);
+
   // ─── Auth ───────────────────────────────────────────────────────────────
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -64,14 +80,11 @@ export default function ChatPage() {
   const [activeContact, setActiveContact] = useState<Contact | null>(null);
 
   useEffect(() => {
-    // NAYA: Ab contacts phoneId ke basis par load honge
     if (!config?.phoneId) return;
     const unsub = listenToContacts(config.phoneId, setContacts);
     return () => unsub();
   }, [config?.phoneId]);
 
-  // Keep the active contact's live fields (unread, lastMessage) in sync
-  // as the contacts list updates in real time.
   useEffect(() => {
     if (!activeContact) return;
     const fresh = contacts.find((c) => c.id === activeContact.id);
@@ -92,7 +105,6 @@ export default function ChatPage() {
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // NAYA: Messages bhi phoneId ke basis par load/read honge
     if (!config?.phoneId || !activeContact) {
       setMessages([]);
       return;
@@ -133,7 +145,6 @@ export default function ChatPage() {
       return null;
     }
     
-    // NAYA LOGIC: Agar phoneNumber nahi mila, toh old 'phone' check karega, wo bhi nahi mila toh direct ID use karega!
     const finalPhone = activeContact.phoneNumber || (activeContact as any).phone || activeContact.id;
 
     return { 
@@ -145,7 +156,6 @@ export default function ChatPage() {
   };
 
   // ─── Send actions — all delegate to chatLogic, no direct API calls here ─
-
   const handleSendText = async () => {
     if (!inputText.trim()) return;
     const ctx = requireContext();
@@ -197,7 +207,6 @@ export default function ChatPage() {
   };
 
   // ─── Message management ─────────────────────────────────────────────────
-
   const handleDeleteSingle = async (id: string) => {
     if (!config?.phoneId || !activeContact) return;
     await deleteMessageFromFirebase(config.phoneId, activeContact.id, id);
@@ -231,7 +240,6 @@ export default function ChatPage() {
   }, []);
 
   // ─── Render ──────────────────────────────────────────────────────────────
-
   if (authLoading) {
     return <div className="flex items-center justify-center h-screen text-gray-400">Loading...</div>;
   }
@@ -241,8 +249,9 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="flex h-screen w-full bg-gray-100 overflow-hidden">
-      {/* ─── Sidebar (desktop always visible, mobile hides when a chat is open) ─── */}
+    // NAYA: h-screen ko h-[100dvh] kar diya gaya hai taki keyboard open hone par height dynamically adjust ho
+    <div className="flex h-[100dvh] w-full bg-gray-100 overflow-hidden">
+      {/* ─── Sidebar ─── */}
       <Sidebar
         contacts={contacts}
         activeContactId={activeContact?.id ?? null}
@@ -286,7 +295,6 @@ export default function ChatPage() {
                       />
                     </div>
                     <div className="flex flex-col min-w-0">
-                      {/* NAYA LOGIC: Header me hamesha kuch na kuch dikhega (Name nahi mila to ID) */}
                       <span className="font-semibold text-[16px] leading-tight truncate">
                         {activeContact.name || activeContact.id}
                       </span>
@@ -297,9 +305,8 @@ export default function ChatPage() {
                   </div>
 
                   <div className="flex items-center gap-1 shrink-0">
-                    <button className="p-2 hover:bg-white/20 rounded-full transition hidden sm:block"><VideoIcon className="w-5 h-5" /></button>
-                    <button className="p-2 hover:bg-white/20 rounded-full transition hidden sm:block"><Phone className="w-5 h-5" /></button>
-
+                    {/* NAYA: Call aur Video icons yahan se hata diye gaye hain */}
+                    
                     <ThemeSelector currentTheme={activeWallpaper.id !== "default" ? activeWallpaper : null} onChange={handleThemeChange} />
 
                     <div className="relative">
