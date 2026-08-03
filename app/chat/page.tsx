@@ -132,8 +132,16 @@ export default function ChatPage() {
       alert("Meta API credentials missing. Please configure them in Settings.");
       return null;
     }
-    // NAYA: uid ki jagah phoneId bhej rahe hain, aur phone ki jagah phoneNumber || ""
-    return { phoneId: config.phoneId, contactId: activeContact.id, recipientPhone: activeContact.phoneNumber || "", config };
+    
+    // NAYA LOGIC: Agar phoneNumber nahi mila, toh old 'phone' check karega, wo bhi nahi mila toh direct ID use karega!
+    const finalPhone = activeContact.phoneNumber || (activeContact as any).phone || activeContact.id;
+
+    return { 
+      phoneId: config.phoneId, 
+      contactId: activeContact.id, 
+      recipientPhone: finalPhone, 
+      config 
+    };
   };
 
   // ─── Send actions — all delegate to chatLogic, no direct API calls here ─
@@ -278,9 +286,13 @@ export default function ChatPage() {
                       />
                     </div>
                     <div className="flex flex-col min-w-0">
-                      <span className="font-semibold text-[16px] leading-tight truncate">{activeContact.name}</span>
-                      {/* NAYA: phone ki jagah phoneNumber */}
-                      <span className="text-[12px] text-white/80">{activeContact.phoneNumber}</span>
+                      {/* NAYA LOGIC: Header me hamesha kuch na kuch dikhega (Name nahi mila to ID) */}
+                      <span className="font-semibold text-[16px] leading-tight truncate">
+                        {activeContact.name || activeContact.id}
+                      </span>
+                      <span className="text-[12px] text-white/80">
+                        {activeContact.phoneNumber || (activeContact as any).phone || activeContact.id}
+                      </span>
                     </div>
                   </div>
 
@@ -342,7 +354,7 @@ export default function ChatPage() {
                     onToggleSelect={toggleSelect}
                     onDelete={handleDeleteSingle}
                     onReply={(m) => setReplyingTo({ text: m.text || `${m.type} message`, sender: m.sender, id: m.id })}
-                    contactName={activeContact.name}
+                    contactName={activeContact.name || activeContact.id}
                   />
                 ))
               )}
@@ -350,14 +362,14 @@ export default function ChatPage() {
 
             {/* Floating Chat Input */}
             <ChatInput
-              uid={user.uid}
+              uid={user?.uid || ""}
               inputText={inputText}
               setInputText={setInputText}
               onSend={handleSendText}
               isSending={isSending}
               replyingTo={replyingTo}
               onCancelReply={() => setReplyingTo(null)}
-              activeContactName={activeContact.name}
+              activeContactName={activeContact.name || activeContact.id}
               onSendMedia={handleSendMedia}
               onSendLocation={handleSendLocation}
               onSendInteractive={(type) => console.log("Interactive sent:", type)}
