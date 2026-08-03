@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { auth, database } from "../lib/firebase";
 import { ref, onValue } from "firebase/database";
 import { onAuthStateChanged } from "firebase/auth";
-import { usePathname } from "next/navigation";
+// NAYA: useRouter import kiya hai redirect karne ke liye
+import { usePathname, useRouter } from "next/navigation"; 
 import Link from "next/link";
 import {
   MessageSquare,
@@ -13,7 +14,7 @@ import {
   CheckCircle2,
   Loader2,
   Link2,
-  Bot, // Retained as requested
+  Bot,
   LayoutTemplate,
   LayoutDashboard,
   Megaphone,
@@ -35,12 +36,13 @@ export default function Sidebar() {
   const [hideOnMobile, setHideOnMobile] = useState<boolean>(false);
 
   const pathname = usePathname();
+  const router = useRouter(); // NAYA: Router initialize kiya
 
   // Firebase Auth & Config Load
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
       if (currentUser) {
+        setUser(currentUser);
         const userRef = ref(database, `users/${currentUser.uid}/config`);
         const unsubscribeDB = onValue(userRef, (snapshot) => {
           setIsMatched(snapshot.exists() && snapshot.val().isMatched);
@@ -48,11 +50,26 @@ export default function Sidebar() {
         });
         return () => unsubscribeDB();
       } else {
+        setUser(null);
         setLoading(false);
       }
     });
     return () => unsubscribeAuth();
   }, []);
+
+  // ─── NAYA LOGIC: Route Guard & Default Redirect ───
+  useEffect(() => {
+    // Jab loading khatam ho jaye tab check karo
+    if (!loading) {
+      if (!user) {
+        // 1. Bina login wale ko dhakka maar ke login page pe bhejo
+        router.push("/login");
+      } else if (pathname === "/") {
+        // 2. Agar logged in hai aur default URL (/) khola hai, toh /chat pe bhejo
+        router.push("/chat");
+      }
+    }
+  }, [loading, user, pathname, router]);
 
   // Smart detector for mobile hide logic
   useEffect(() => {
@@ -73,7 +90,7 @@ export default function Sidebar() {
   const isActive = (paths: string[]) =>
     paths.some((p) => pathname === p || pathname?.startsWith(p + "/"));
 
-  // Main nav items — mirroring Waplify's structure from screenshot
+  // Main nav items
   const navItems = [
     {
       href: "/dashboard",
@@ -88,10 +105,10 @@ export default function Sidebar() {
       activePaths: ["/campaigns"],
     },
     {
-      href: "/chat", // UPDATE: Changed from "/" to "/chat"
+      href: "/chat",
       icon: MessageSquare,
       label: "Chat",
-      activePaths: ["/chat"], // UPDATE: Adjusted active paths
+      activePaths: ["/chat"],
     },
     {
       href: "/chatbot-builder",
@@ -113,7 +130,6 @@ export default function Sidebar() {
     },
   ];
 
-  // NAYA: Asli Settings page yahan add kar diya hai
   const bottomItems = [
     { href: "/settings", icon: Settings, label: "Settings", activePaths: ["/settings"] },
     { href: "/developers", icon: Code2, label: "Developers", activePaths: ["/developers"] },
@@ -135,6 +151,9 @@ export default function Sidebar() {
     );
   }
 
+  // Agar user null hai aur redirect ho raha hai, toh null return kardo taaki UI flash na ho
+  if (!user) return null; 
+
   return (
     <>
       {/* ================================================ */}
@@ -153,7 +172,6 @@ export default function Sidebar() {
         >
           {!collapsed && (
             <div className="flex items-center gap-2 overflow-hidden">
-              {/* WhatsApp-style brand mark */}
               <div className="w-7 h-7 bg-[#25D366] rounded-lg flex items-center justify-center shrink-0">
                 <MessageSquare className="w-4 h-4 text-white" />
               </div>
@@ -167,7 +185,6 @@ export default function Sidebar() {
               <MessageSquare className="w-4 h-4 text-white" />
             </div>
           )}
-          {/* Collapse toggle button */}
           <button
             onClick={() => setCollapsed(!collapsed)}
             className={`w-6 h-6 rounded-full bg-gray-100 hover:bg-gray-200 border border-gray-200 flex items-center justify-center text-gray-500 transition-colors shrink-0 ${
@@ -199,7 +216,6 @@ export default function Sidebar() {
                       } ${collapsed ? "justify-center px-0" : ""}`}
                       title={collapsed ? item.label : undefined}
                     >
-                      {/* Active indicator bar */}
                       {active && !collapsed && (
                         <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-[#25D366] rounded-r-full" />
                       )}
@@ -217,7 +233,6 @@ export default function Sidebar() {
                           {item.label}
                         </span>
                       )}
-                      {/* Tooltip when collapsed */}
                       {collapsed && (
                         <div className="absolute left-[52px] px-2.5 py-1.5 bg-gray-900 text-white text-xs font-medium rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50 shadow-lg">
                           {item.label}
@@ -249,7 +264,6 @@ export default function Sidebar() {
 
         {/* Bottom section */}
         <div className={`flex flex-col pb-4 pt-2 border-t border-gray-100 gap-0.5 px-2`}>
-          {/* Bottom nav items (Settings yahan automatically aa jayega array se) */}
           {bottomItems.map((item) => {
             const active = isActive(item.activePaths);
             return (
@@ -274,7 +288,6 @@ export default function Sidebar() {
             );
           })}
 
-          {/* NAYA: Settings ko Configuration bana diya aur Modal link kar diya */}
           <div
             className={`flex items-center gap-3 rounded-lg px-2.5 py-2 cursor-pointer transition-all duration-150 text-gray-400 hover:bg-gray-50 hover:text-gray-600 ${
               collapsed ? "justify-center px-0" : ""
@@ -321,7 +334,7 @@ export default function Sidebar() {
       </aside>
 
       {/* ================================================ */}
-      {/* MOBILE BOTTOM BAR (FIXED: Scrollable, All Buttons Visible) */}
+      {/* MOBILE BOTTOM BAR                                */}
       {/* ================================================ */}
       <nav
         className={`md:hidden fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-gray-100 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] transition-all duration-300 ease-in-out ${
@@ -330,11 +343,9 @@ export default function Sidebar() {
             : "translate-y-0 opacity-100"
         }`}
       >
-        {/* Scrollable Container added to fix missing buttons */}
         <div className="flex items-center h-16 px-2 overflow-x-auto gap-2 w-full [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
           {isMatched ? (
             <>
-              {/* NAYA: slice(0,4) hata diya. Ab saare Nav items dikhenge */}
               {navItems.map((item) => {
                 const active = isActive(item.activePaths);
                 return (
@@ -364,7 +375,6 @@ export default function Sidebar() {
                 );
               })}
 
-              {/* Asli Settings button in mobile */}
               <Link href="/settings" className="flex-1 min-w-[70px] shrink-0">
                 <div className="flex flex-col items-center justify-center gap-0.5 py-1.5">
                   <div className={`relative w-9 h-9 rounded-xl flex items-center justify-center transition-all ${
@@ -378,7 +388,6 @@ export default function Sidebar() {
                 </div>
               </Link>
 
-              {/* Configuration (Modal) button in mobile */}
               <button
                 onClick={() => setIsModalOpen(true)}
                 className="flex-1 min-w-[70px] shrink-0 flex flex-col items-center justify-center gap-0.5 py-1.5"
