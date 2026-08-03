@@ -1,16 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { database, auth } from "../lib/firebase";
-import { ref, set } from "firebase/database";
+import { auth } from "../lib/firebase"; // Sirf auth rakha hai user ID ke liye, DB hata diya
 import { X, Key, Phone, Link2, CheckCircle2, Copy, ShieldAlert, Check, Facebook, Loader2 } from "lucide-react";
-
-declare global {
-  interface Window {
-    fbAsyncInit: any;
-    FB: any;
-  }
-}
 
 interface ConfigModalProps {
   isOpen: boolean;
@@ -19,7 +11,8 @@ interface ConfigModalProps {
 }
 
 export default function ConfigModal({ isOpen, onClose, onSuccess }: ConfigModalProps) {
-  const [setupMode, setSetupMode] = useState<"auto" | "manual">("auto");
+  // 👇 Default ko 'manual' kar diya hai
+  const [setupMode, setSetupMode] = useState<"manual" | "auto">("manual");
   
   const [accessToken, setAccessToken] = useState("");
   const [phoneId, setPhoneId] = useState("");
@@ -27,10 +20,9 @@ export default function ConfigModal({ isOpen, onClose, onSuccess }: ConfigModalP
   const [verifyToken, setVerifyToken] = useState("");
   const [webhookUrl, setWebhookUrl] = useState("");
   const [loading, setLoading] = useState(false);
-  const [isFbLoggingIn, setIsFbLoggingIn] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
-  // 1. Data Load & Webhook URL Setup (FIXED TOKEN LOGIC)
+  // 1. Data Load & Webhook URL Setup
   useEffect(() => {
     if (isOpen) {
       const savedToken = localStorage.getItem("metaAccessToken") || "";
@@ -44,37 +36,14 @@ export default function ConfigModal({ isOpen, onClose, onSuccess }: ConfigModalP
       const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || window.location.origin;
       setWebhookUrl(`${baseUrl}/api/webhook`);
 
-      // 👇 UPDATE: Random की जगह अब User ID से फिक्स टोकन बनेगा
+      // Token Logic
       const user = auth.currentUser;
       if (user) {
-        // यह टोकन हमेशा सेम रहेगा, कभी नहीं बदलेगा!
         const staticToken = "BASEKEY_" + user.uid.substring(0, 12).toUpperCase();
         setVerifyToken(staticToken);
       } else {
         setVerifyToken("BASEKEY_TEMP_TOKEN");
       }
-    }
-  }, [isOpen]);
-
-  // 2. Facebook SDK Load
-  useEffect(() => {
-    if (isOpen) {
-      window.fbAsyncInit = function() {
-        window.FB.init({
-          appId      : '919361547126340', 
-          cookie     : true,
-          xfbml      : true,
-          version    : 'v20.0'
-        });
-      };
-
-      (function(d, s, id){
-         var js, fjs = d.getElementsByTagName(s)[0] as HTMLElement;
-         if (d.getElementById(id)) {return;}
-         js = d.createElement(s) as HTMLScriptElement; js.id = id;
-         js.src = "https://connect.facebook.net/en_US/sdk.js";
-         fjs.parentNode?.insertBefore(js, fjs);
-       }(document, 'script', 'facebook-jssdk'));
     }
   }, [isOpen]);
 
@@ -90,6 +59,7 @@ export default function ConfigModal({ isOpen, onClose, onSuccess }: ConfigModalP
 
     setLoading(true);
     try {
+      // Local storage mein backup ke liye rakh lete hain
       localStorage.setItem("metaAccessToken", accessToken);
       localStorage.setItem("phoneId", phoneId);
       localStorage.setItem("wabaId", wabaId);
@@ -97,56 +67,30 @@ export default function ConfigModal({ isOpen, onClose, onSuccess }: ConfigModalP
 
       const user = auth.currentUser;
       if (user) {
-        await set(ref(database, `users/${user.uid}/config`), {
-          isMatched: true,
-          accessToken, phoneId, wabaId,
-          webhookVerifyToken: verifyToken,
-          webhookUrl,
-          configuredAt: new Date().toISOString(),
-          isWebhookVerified: false,
-          setupType: "manual" 
+        // 👇 FIREBASE KI JAGAH PRISMA/NEON API CALL
+        const res = await fetch("/api/settings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            accessToken,
+            phoneNumberId: phoneId,
+            businessAccountId: wabaId,
+            verifyToken,
+          }),
         });
-        
-        onSuccess(); 
-        onClose(); 
+
+        if (res.ok) {
+          onSuccess(); 
+          onClose(); 
+        } else {
+          alert("Failed to save configuration in Database.");
+        }
       }
     } catch (error) {
       console.error("Error saving config:", error);
       alert("Failed to save configuration.");
     }
     setLoading(false);
-  };
-
-  const handleFacebookLogin = () => {
-    if (!window.FB) {
-      alert("Facebook SDK is still loading. Please try again in a few seconds.");
-      return;
-    }
-
-    setIsFbLoggingIn(true);
-    const configId = process.env.NEXT_PUBLIC_META_CONFIG_ID || '1392579292765106';
-
-    window.FB.login((response: any) => {
-      setIsFbLoggingIn(false);
-
-      if (response.authResponse) {
-        const code = response.authResponse.code;
-        console.log('WhatsApp Onboarding Success! Auth Code:', code);
-        alert("Success! Check Console for Auth Code.");
-      } else {
-        console.log('User cancelled login or did not fully authorize.');
-      }
-    }, {
-      config_id: configId,
-      response_type: 'code',
-      override_default_response_type: true,
-      extras: {
-        setup: {},
-        dataLayer: {
-          current_step: 'whatsapp_onboarding'
-        }
-      }
-    });
   };
 
   const handleCopy = (text: string, field: string) => {
@@ -178,48 +122,22 @@ export default function ConfigModal({ isOpen, onClose, onSuccess }: ConfigModalP
         {/* Tabs */}
         <div className="flex px-6 pt-4 gap-4 bg-gray-50/50">
           <button 
-            onClick={() => setSetupMode("auto")}
-            className={`flex-1 py-2 text-sm font-bold border-b-2 transition-all ${setupMode === "auto" ? "border-[#25D366] text-[#25D366]" : "border-transparent text-gray-400 hover:text-gray-600"}`}
-          >
-            Quick Connect (Auto)
-          </button>
-          <button 
             onClick={() => setSetupMode("manual")}
             className={`flex-1 py-2 text-sm font-bold border-b-2 transition-all ${setupMode === "manual" ? "border-[#25D366] text-[#25D366]" : "border-transparent text-gray-400 hover:text-gray-600"}`}
           >
             Manual Setup
+          </button>
+          <button 
+            onClick={() => setSetupMode("auto")}
+            className={`flex-1 py-2 text-sm font-bold border-b-2 transition-all ${setupMode === "auto" ? "border-[#25D366] text-[#25D366]" : "border-transparent text-gray-400 hover:text-gray-600"}`}
+          >
+            Quick Connect <span className="text-[10px] bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded-full ml-1">Soon</span>
           </button>
         </div>
 
         {/* Body */}
         <div className="p-6 overflow-y-auto max-h-[65vh] bg-gray-50/50">
           
-          {/* AUTO MODE UI */}
-          {setupMode === "auto" && (
-            <div className="flex flex-col items-center justify-center py-8 space-y-6 text-center">
-              <div className="bg-blue-50 p-4 rounded-full">
-                <Facebook className="w-10 h-10 text-blue-600" />
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-gray-800">1-Click WhatsApp Setup</h3>
-                <p className="text-sm text-gray-500 mt-2 max-w-xs mx-auto">
-                  Log in with Facebook to automatically link your WhatsApp Business account and API keys. No coding required.
-                </p>
-              </div>
-              <button 
-                onClick={handleFacebookLogin}
-                disabled={isFbLoggingIn}
-                className="flex items-center gap-2 bg-[#1877F2] text-white px-8 py-3.5 rounded-xl font-bold hover:bg-[#166FE5] hover:shadow-lg hover:shadow-blue-500/30 active:scale-95 transition-all disabled:opacity-70 disabled:cursor-not-allowed"
-              >
-                {isFbLoggingIn ? (
-                  <><Loader2 className="w-5 h-5 animate-spin" /> Connecting...</>
-                ) : (
-                  <><Facebook className="w-5 h-5" /> Continue with Facebook</>
-                )}
-              </button>
-            </div>
-          )}
-
           {/* MANUAL MODE UI */}
           {setupMode === "manual" && (
             <div className="space-y-5 animate-in fade-in slide-in-from-bottom-2 duration-300">
@@ -280,6 +198,30 @@ export default function ConfigModal({ isOpen, onClose, onSuccess }: ConfigModalP
                   </div>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* AUTO MODE UI (COMING SOON) */}
+          {setupMode === "auto" && (
+            <div className="flex flex-col items-center justify-center py-8 space-y-6 text-center opacity-80 grayscale">
+              <div className="bg-blue-50 p-4 rounded-full">
+                <Facebook className="w-10 h-10 text-blue-600" />
+              </div>
+              <div>
+                <div className="flex items-center justify-center gap-2 mb-2">
+                  <h3 className="text-lg font-bold text-gray-800">1-Click WhatsApp Setup</h3>
+                  <span className="bg-gray-200 text-gray-600 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide">Coming Soon</span>
+                </div>
+                <p className="text-sm text-gray-500 max-w-xs mx-auto">
+                  Automatic Facebook login integration is currently under development. Please use the Manual Setup for now.
+                </p>
+              </div>
+              <button 
+                disabled
+                className="flex items-center gap-2 bg-gray-300 text-gray-500 px-8 py-3.5 rounded-xl font-bold cursor-not-allowed"
+              >
+                <Facebook className="w-5 h-5" /> Continue with Facebook
+              </button>
             </div>
           )}
         </div>
