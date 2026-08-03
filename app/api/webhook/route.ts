@@ -1,30 +1,12 @@
 // App/api/webhook/route.ts
 import { NextResponse } from "next/server";
-import { initializeApp, getApps, cert } from "firebase-admin/app";
-import { getDatabase } from "firebase-admin/database";
+import { PrismaClient, MessageType, MessageDirection, MessageStatus } from "@prisma/client";
 import { runFlowEngine } from "@/lib/whatsapp/engine";
 
-// ─── 1. Safe Firebase Admin Initialization ───
-if (!getApps().length) {
-  const serviceAccount = {
-    projectId: process.env.FIREBASE_PROJECT_ID,
-    clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-    privateKey: process.env.FIREBASE_SERVICE_ACCOUNT_KEY?.replace(/\\n/g, '\n'),
-  };
+// Prisma client initialize kar rahe hain
+const prisma = new PrismaClient();
 
-  try {
-    initializeApp({
-      credential: cert(serviceAccount),
-      databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL,
-    });
-  } catch (error) {
-    console.error("Firebase Admin Initialization Error:", error);
-  }
-}
-
-const db = getDatabase();
-
-// ─── GET: Webhook Verification (Dynamic Database Check) ───
+// ─── GET: Webhook Verification (Prisma / DB Check) ───
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const mode = url.searchParams.get("hub.mode");
@@ -33,20 +15,16 @@ export async function GET(req: Request) {
 
   if (mode === "subscribe" && token) {
     try {
-      const usersRef = db.ref("users");
-      const snapshot = await usersRef.orderByChild("config/webhookVerifyToken").equalTo(token).once("value");
+      // Prisma: Check if the token matches verifyToken in SystemSettings
+      const settings = await prisma.systemSettings.findFirst({
+        where: { verifyToken: token }
+      });
 
-      if (snapshot.exists()) {
-        snapshot.forEach((childSnapshot) => {
-          childSnapshot.ref.child("config").update({
-            isWebhookVerified: true
-          });
-        });
-
-        console.log(`✅ Webhook Verified for a user with token: ${token}`);
+      if (settings) {
+        console.log(`✅ Webhook Verified Successfully with token: ${token}`);
         return new Response(challenge, { status: 200 });
       } else {
-        console.warn(`❌ Webhook Verification Failed: Token not found in database.`);
+        console.warn(`❌ Webhook Verification Failed: Token not found.`);
         return new Response("Forbidden: Invalid Token", { status: 403 });
       }
     } catch (error) {
@@ -75,14 +53,14 @@ export async function POST(req: Request) {
         const phoneId = value.metadata?.phone_number_id;
         if (!phoneId) continue;
 
-        // ─── A. RECEIVED MESSAGES ───
+        // ─── A. RECEIVED MESSAGES (INBOUND) ───
         if (value.messages && value.messages.length > 0) {
           for (const message of value.messages) {
-            // ✅ FIX: Added 'await' so Vercel doesn't kill the function before Firebase saves data
+            // ✅ AWAIT is compulsory for Serverless (Vercel)
             try {
               await handleIncomingMessage(phoneId, message, value.contacts);
             } catch (e) {
-              console.error("Message Error:", e);
+              console.error("Message Processing Error:", e);
             }
           }
         }
@@ -90,11 +68,11 @@ export async function POST(req: Request) {
         // ─── B. STATUS UPDATES (Read Receipts) ───
         if (value.statuses && value.statuses.length > 0) {
           for (const status of value.statuses) {
-            // ✅ FIX: Added 'await' for status updates as well
+            // ✅ AWAIT is compulsory for Serverless (Vercel)
             try {
-              await handleStatusUpdate(phoneId, status);
+              await handleStatusUpdate(status);
             } catch (e) {
-              console.error("Status Error:", e);
+              console.error("Status Processing Error:", e);
             }
           }
         }
@@ -108,7 +86,6 @@ export async function POST(req: Request) {
       }
     }
 
-    // ⚡ WhatsApp ko turant 200 OK bhej do
     return new NextResponse("EVENT_RECEIVED", { status: 200 });
   } catch (error) {
     console.error("Webhook Processing Error:", error);
@@ -116,170 +93,154 @@ export async function POST(req: Request) {
   }
 }
 
-// ─── Handle Incoming Message ───
+// ─── Handle Incoming Message (Prisma Logic) ───
 async function handleIncomingMessage(phoneId: string, message: any, contacts: any[]) {
   const senderPhone = message.from;
   const senderName = contacts?.[0]?.profile?.name || senderPhone;
-  const messageId = message.id;
-  const timestamp = parseInt(message.timestamp) * 1000;
-  const messageType = message.type;
+  const messageId = message.id; // Meta ka diya hua wamid ID
+  const timestamp = new Date(parseInt(message.timestamp) * 1000); // Convert to JS Date for Prisma
+  const rawType = message.type;
 
-  let text = "", mediaUrl = null, mediaType = null, caption = null, location = null, interactive = null, button = null;
+  let textBody = "";
+  let mediaUrl = null;
+  let enumType: MessageType = "TEXT";
+  let interactivePayload = null;
 
-  switch (messageType) {
-    case "text": text = message.text?.body || ""; break;
-    case "image": mediaType = "image"; mediaUrl = message.image?.id; caption = message.image?.caption; text = caption || "📷 Image"; break;
-    case "video": mediaType = "video"; mediaUrl = message.video?.id; caption = message.video?.caption; text = caption || "🎥 Video"; break;
-    case "audio": mediaType = "audio"; mediaUrl = message.audio?.id; text = "🎵 Audio message"; break;
-    case "voice": mediaType = "voice"; mediaUrl = message.voice?.id; text = "🎤 Voice message"; break;
-    case "document": mediaType = "document"; mediaUrl = message.document?.id; caption = message.document?.caption; text = caption || `📄 ${message.document?.filename || "Document"}`; break;
-    case "sticker": mediaType = "sticker"; mediaUrl = message.sticker?.id; text = "😀 Sticker"; break;
-    case "location": location = { latitude: message.location?.latitude, longitude: message.location?.longitude, name: message.location?.name, address: message.location?.address }; text = `📍 Location: ${location.name || `${location.latitude}, ${location.longitude}`}`; break;
-    case "contacts": text = "👤 Shared contact"; break;
-    case "button": button = { payload: message.button?.payload, text: message.button?.text }; text = `▶️ ${button.text || "Button clicked"}`; break;
+  // Type aur data map karna according to Prisma Schema
+  switch (rawType) {
+    case "text": 
+      textBody = message.text?.body || ""; 
+      enumType = "TEXT"; 
+      break;
+    case "image": 
+      enumType = "IMAGE"; 
+      mediaUrl = message.image?.id; 
+      textBody = message.image?.caption || "📷 Image"; 
+      break;
+    case "video": 
+      enumType = "VIDEO"; 
+      mediaUrl = message.video?.id; 
+      textBody = message.video?.caption || "🎥 Video"; 
+      break;
+    case "audio": 
+    case "voice":
+      enumType = "AUDIO"; 
+      mediaUrl = message.audio?.id || message.voice?.id; 
+      textBody = "🎵 Audio message"; 
+      break;
+    case "document": 
+      enumType = "DOCUMENT"; 
+      mediaUrl = message.document?.id; 
+      textBody = message.document?.caption || `📄 ${message.document?.filename || "Document"}`; 
+      break;
     case "interactive":
+      enumType = "INTERACTIVE";
       if (message.interactive?.type === "button_reply") {
-        interactive = { type: "button_reply", id: message.interactive.button_reply?.id, title: message.interactive.button_reply?.title };
-        text = `🔘 ${interactive.title || "Button reply"}`;
+        textBody = message.interactive.button_reply?.title || "Button reply";
+        interactivePayload = { type: "button_reply", value: message.interactive.button_reply?.id };
       } else if (message.interactive?.type === "list_reply") {
-        interactive = { type: "list_reply", id: message.interactive.list_reply?.id, title: message.interactive.list_reply?.title, description: message.interactive.list_reply?.description };
-        text = `📋 ${interactive.title || "List selection"}`;
+        textBody = message.interactive.list_reply?.title || "List selection";
+        interactivePayload = { type: "list_reply", value: message.interactive.list_reply?.id };
       }
       break;
-    case "order": text = "🛒 Order received"; break;
-    case "system": text = "⚙️ System message"; break;
-    case "reaction": text = `👍 Reacted: ${message.reaction?.emoji || ""}`; break;
-    default: text = `📎 ${messageType} message`;
+    case "button": 
+      enumType = "INTERACTIVE"; 
+      textBody = message.button?.text || "Button clicked"; 
+      interactivePayload = { type: "button_reply", value: message.button?.payload };
+      break;
+    case "location": 
+      enumType = "TEXT"; 
+      textBody = `📍 Location: ${message.location?.name || `${message.location?.latitude}, ${message.location?.longitude}`}`; 
+      break;
+    default: 
+      enumType = "TEXT"; 
+      textBody = `📎 ${rawType} message`;
   }
 
-  // Save message to Firebase (chats/{phoneId}/{senderPhone}/messages)
-  const chatRef = db.ref(`chats/${phoneId}/${senderPhone}/messages`);
-  await chatRef.push({
-    metaId: messageId, 
-    text, 
-    sender: "them", 
-    time: new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-    timestamp, 
-    status: "received", 
-    messageType, 
-    mediaUrl, 
-    mediaType, 
-    caption, 
-    location, 
-    interactive, 
-    button,
+  // 1. Prisma UPSERT: Contact ko dhoondo, update karo ya naya banao
+  const contact = await prisma.contact.upsert({
+    where: { phoneNumber: senderPhone },
+    update: {
+      name: senderName,
+      lastMessageAt: timestamp,
+      unreadCount: { increment: 1 },
+      isSessionActive: true,
+    },
+    create: {
+      phoneNumber: senderPhone,
+      name: senderName,
+      lastMessageAt: timestamp,
+      unreadCount: 1,
+      isSessionActive: true,
+    },
   });
 
-  // Update contact info in Firebase
-  const infoRef = db.ref(`chats/${phoneId}/${senderPhone}/info`);
-  const infoSnap = await infoRef.once("value");
-  const currentUnread = infoSnap.exists() ? (infoSnap.val().unread || 0) : 0;
-
-  await infoRef.set({
-    name: senderName,
-    phoneNumber: senderPhone,
-    lastMessage: text,
-    updatedAt: timestamp,
-    unread: currentUnread + 1,
+  // 2. Prisma CREATE: Message table mein message save karo
+  await prisma.message.create({
+    data: {
+      id: messageId, // Meta API ka message ID (wamid.xxxx)
+      contactId: contact.id,
+      body: textBody,
+      type: enumType,
+      direction: "INBOUND",
+      status: "DELIVERED", // Jo aaya hai wo delivered hi maana jayega
+      mediaUrl: mediaUrl,
+      timestamp: timestamp,
+    },
   });
 
-  console.log(`📩 [${messageType}] From ${senderName} (${senderPhone}): ${text.substring(0, 60)}`);
+  console.log(`📩 [INBOUND - ${enumType}] From ${senderName}: ${textBody.substring(0, 60)}`);
 
-  // ─── 🔌 D. HAND OFF TO THE FLOW ENGINE (100% Firebase Now) ───
+  // ─── 🔌 D. HAND OFF TO THE FLOW ENGINE ───
   try {
-    // 1. Dhoondo ki is phoneId ka asali user (uid) kaun hai taaki uski settings padh sakein
-    let matchedUid = null;
-    let isAiBotActive = false;
-
-    const usersSnap = await db.ref("users").once("value");
-    usersSnap.forEach((userChild) => {
-      const configData = userChild.val().config;
-      if (configData && configData.phoneId === phoneId) {
-        matchedUid = userChild.key;
-        isAiBotActive = configData.isAiBotActive === true;
-      }
+    const settings = await prisma.systemSettings.findFirst({
+      where: { phoneNumberId: phoneId }
     });
 
-    if (!isAiBotActive && matchedUid) {
-      // Check if a flow actually exists before running the engine
-      const flowSnapshot = await db.ref(`users/${matchedUid}/chatFlows/main_flow`).once("value");
-      
-      if (flowSnapshot.exists()) {
-        if (interactive?.type === "button_reply") {
-          await runFlowEngine(phoneId, senderPhone, { type: "button_reply", value: interactive.id });
-        } else if (interactive?.type === "list_reply") {
-          await runFlowEngine(phoneId, senderPhone, { type: "list_reply", value: interactive.id });
-        } else if (button?.payload) {
-          await runFlowEngine(phoneId, senderPhone, { type: "button_reply", value: button.payload });
-        } else if (messageType === "text") {
-          await runFlowEngine(phoneId, senderPhone, { type: "text", value: text });
+    if (settings) {
+      if (!settings.isAiBotActive) {
+        // Run Visual Flow Engine
+        if (interactivePayload) {
+          await runFlowEngine(phoneId, senderPhone, interactivePayload);
+        } else if (rawType === "text") {
+          await runFlowEngine(phoneId, senderPhone, { type: "text", value: textBody });
         }
       } else {
-        console.log(`⚠️ No visual flow published for ${phoneId}. Skipping Flow Engine.`);
+        console.log(`🤖 AI Bot is active for ${phoneId}. Skipping visual Flow Engine.`);
+        // Yahan par aage chal kar Gemini Bot connect hoga
       }
-    } else if (isAiBotActive) {
-      console.log(`🤖 AI Bot is active for ${phoneId}. Skipping visual Flow Engine.`);
-      // Future me Gemini AI ka code yahan aayega
     }
   } catch (engineError) {
     console.error("Flow engine error:", engineError);
   }
 }
 
-// ─── Handle Status Update ───
-async function handleStatusUpdate(phoneId: string, status: any) {
-  const recipientPhone = status.recipient_id;
-  const metaId = status.id; // Meta ka diya hua ID, jo pehle humare DB me save nahi hota tha.
-  const newStatus = status.status; // 'sent', 'delivered', 'read', 'failed'
-  const timestamp = parseInt(status.timestamp) * 1000;
+// ─── Handle Status Update (Prisma Logic) ───
+async function handleStatusUpdate(status: any) {
+  const metaId = status.id; // Meta ka diya hua Message ID (wamid...)
+  const metaStatus = status.status; // 'sent', 'delivered', 'read', 'failed'
 
-  const messagesRef = db.ref(`chats/${phoneId}/${recipientPhone}/messages`);
-  
-  // FIX FOR STATUS TICKS:
-  // Kyunki hum UI se bhejte waqt Firebase ka Push ID save karte hain aur usme 'metaId' property blank rehti hai, 
-  // isliye hum directly us incoming update ko assign kar dete hain jo message 'me' (humne) bheja hai aur sabse recent hai
-  
-  const snapshot = await messagesRef.orderByChild("sender").equalTo("me").limitToLast(5).once("value");
+  let dbStatus: MessageStatus | null = null;
+  if (metaStatus === "sent") dbStatus = "SENT";
+  if (metaStatus === "delivered") dbStatus = "DELIVERED";
+  if (metaStatus === "read") dbStatus = "READ";
 
-  if (snapshot.exists()) {
-    let targetMessageRef: any = null;
-    let foundByMetaId = false;
-
-    snapshot.forEach((childSnapshot) => {
-      const msgData = childSnapshot.val();
-      // Pehle dekhte hain ki kya metaId match hota hai (agar pehle update aake save hua ho)
-      if (msgData.metaId === metaId) {
-         targetMessageRef = childSnapshot.ref;
-         foundByMetaId = true;
-      }
-    });
-
-    if (!foundByMetaId) {
-      // Agar metaId se match nahi mila, to sabse aakhri aisa message dhundo jiska status 'sent' ya 'delivered' ho aur naya aane wala status update kardo
-       snapshot.forEach((childSnapshot) => {
-          const msgData = childSnapshot.val();
-          if(msgData.status !== "read" && msgData.status !== newStatus) {
-              targetMessageRef = childSnapshot.ref; // Latest outgoing message pakdo
-          }
-       });
+  if (dbStatus) {
+    try {
+      // Prisma: Message ko directly uske ID (wamid) se find karke update kar do. 
+      // Ab hume Firebase ki tarah loop lagake dhundhne ki zaroorat nahi!
+      await prisma.message.update({
+        where: { id: metaId },
+        data: { status: dbStatus },
+      });
+      console.log(`📊 Updated Status to [${dbStatus}] for message: ${metaId}`);
+    } catch (error) {
+      // Agar update fail hota hai (jaise message ID na mile), to error handle karo
+      console.log(`⚠️ Status update skipped (Message ID not found in DB): ${metaId}`);
     }
-
-    if (targetMessageRef) {
-       await targetMessageRef.update({
-          status: newStatus,
-          metaId: metaId, // Aage ke updates (jaise 'read') ke liye metaId ab save ho jayega!
-          statusTimestamp: timestamp,
-       });
-       console.log(`📊 Updated Status to [${newStatus}] for user ${recipientPhone}`);
-    } else {
-       console.log(`⚠️ Status target message not found for ${recipientPhone}, might be fully read or too old.`);
-    }
-
-  } else {
-    console.log(`⚠️ No outgoing messages found for ${recipientPhone} to apply status update.`);
   }
 
-  if (newStatus === "failed" && status.errors) {
+  if (metaStatus === "failed" && status.errors) {
     for (const error of status.errors) {
       console.error(`❌ Message failed: ${error.code} - ${error.title} - ${error.message}`);
     }
