@@ -7,7 +7,7 @@ generator client {
   provider = "prisma-client-js"
 }
 
-// 1. WhatsApp API aur Gemini Bot ki Dynamic Settings ke liye
+// 1. WhatsApp API aur Gemini Bot ki Dynamic Settings
 model SystemSettings {
   id                  String   @id @default("main_settings")
   phoneNumberId       String   @default("")
@@ -19,45 +19,73 @@ model SystemSettings {
   updatedAt           DateTime @updatedAt
 }
 
-// 2. WhatsApp Contacts (Chat Sidebar ke liye)
+// 2. WhatsApp Contacts (Chat Sidebar)
 model Contact {
   id               String    @id @default(uuid())
-  phoneNumber      String    @unique // WhatsApp Number (e.g., "918252366912")
-  name             String?   // WhatsApp profile name
-  email            String?   // 👈 NAYA: Optional Email Field (Google/CSV import ke liye)
-  source           String    @default("manual") // 👈 NAYA: "google", "csv", ya "manual"
+  phoneNumber      String    @unique 
+  name             String?   
+  email            String?   
+  source           String    @default("manual") 
   unreadCount      Int       @default(0)
   lastMessageAt    DateTime  @default(now())
-  isSessionActive  Boolean   @default(true) // 24-Hour Session Window Indicator
-  activeFlowNodeId String?   // 👈 Jis node pe user currently atka hai
+  isSessionActive  Boolean   @default(true) 
+  activeFlowNodeId String?   
   messages         Message[]
   createdAt        DateTime  @default(now())
 }
 
-// 3. Messages Model (Full Chat System & Media Engine)
+// 3. Messages Model (Analytics ke liye Upgrade kiya gaya)
 model Message {
-  id          String        @id // Meta WhatsApp Message ID (e.g., "wamid.HBgM...")
+  id          String        @id 
   contactId   String
   contact     Contact       @relation(fields: [contactId], references: [id], onDelete: Cascade)
-  body        String        @default("") // Text message or media caption
-  type        MessageType   @default(TEXT) // TEXT, IMAGE, VIDEO, AUDIO, DOCUMENT, INTERACTIVE
+  body        String        @default("") 
+  type        MessageType   @default(TEXT) 
   direction   MessageDirection
-  status      MessageStatus @default(SENT) // SENT, DELIVERED, READ
-  mediaUrl    String?       // Cloudinary Secure URL for Images/Videos/Docs
+  status      MessageStatus @default(SENT) 
+  mediaUrl    String?       
+  
+  // NAYA: Analytics track karne ke liye (Message kahan se gaya?)
+  source      MessageSource @default(CHAT) 
+  
   timestamp   DateTime      @default(now())
 }
 
-// 4. Chatbot Flow (React Flow JSON storage)
+// 4. Chatbot Flow
 model ChatFlow {
   id        String   @id @default(uuid())
   name      String   @default("Default Flow")
   isActive  Boolean  @default(true)
-  nodes     Json     // React Flow nodes array
-  edges     Json     // React Flow edges array
+  nodes     Json     
+  edges     Json     
   updatedAt DateTime @updatedAt
 }
 
-// Enums for Strict Data Typing
+// 5. NAYA: WhatsApp Templates (Media + Text + Buttons)
+model Template {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  language    String   @default("en_US")
+  category    String   @default("MARKETING")
+  components  Json     
+  status      String   @default("DRAFT")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// 6. NAYA: API Keys Management (Expiry + Revoke + Template tracking)
+model ApiKey {
+  id          String    @id @default(uuid())
+  name        String    // Linked Template ka naam
+  token       String    @unique 
+  expiresAt   DateTime? // Expiry date
+  isRevoked   Boolean   @default(false) // Emergency Kill Switch
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+// --- ENUMS FOR STRICT DATA TYPING ---
+
 enum MessageType {
   TEXT
   IMAGE
@@ -65,15 +93,26 @@ enum MessageType {
   AUDIO
   DOCUMENT
   INTERACTIVE
+  TEMPLATE // NAYA: Template messages track karne ke liye
+  LOCATION // NAYA: Location track karne ke liye
+  STICKER  // NAYA: Stickers track karne ke liye
+}
+
+// NAYA: Analytics Source Tracking (Dashboard ke PDFs ke liye)
+enum MessageSource {
+  CHAT      // Chat dashboard se gaya
+  FLOW      // Flow Builder/Bot se gaya
+  API       // External Trigger API se gaya
+  CAMPAIGN  // Bulk Campaign se gaya
 }
 
 enum MessageDirection {
-  INBOUND  // User se aaya hua message
-  OUTBOUND // Admin ya Gemini dwara bheja gaya message
+  INBOUND  
+  OUTBOUND 
 }
 
 enum MessageStatus {
-  SENT      // Single gray tick
-  DELIVERED // Double gray tick
-  READ      // Double blue tick
+  SENT      
+  DELIVERED 
+  READ      
 }
