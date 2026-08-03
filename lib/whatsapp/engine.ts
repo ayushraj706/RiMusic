@@ -1,8 +1,11 @@
 // lib/whatsapp/engine.ts
-import { db } from "@/prisma/lib/db"; // your Prisma client singleton
+import * as admin from "firebase-admin";
 import type { WhatsAppNode, WhatsAppNodeData } from "@/store/useChatbotStore";
 import type { Edge } from "@xyflow/react";
 import { sendWhatsAppMessage } from "./sender";
+
+// Firebase DB Access Helper (Taaki initialization error na aaye)
+const getDb = () => admin.database();
 
 interface FlowGraph {
   nodes: WhatsAppNode[];
@@ -14,11 +17,20 @@ interface IncomingSignal {
   value: string; // text body, OR button/list reply id
 }
 
-// ─── 1. Load the active flow (cache this in prod — Redis/memory, 60s TTL) ───
-async function getActiveFlow(): Promise<FlowGraph | null> {
-  const flow = await db.chatFlow.findFirst({ where: { isActive: true } });
-  if (!flow) return null;
-  return { nodes: flow.nodes as unknown as WhatsAppNode[], edges: flow.edges as unknown as Edge[] };
+// ─── 1. Load the active flow from Firebase ───
+async function getActiveFlow(phoneId: string): Promise<FlowGraph | null> {
+  const db = getDb();
+  // Webhook ki tarah same path jahan frontend flow save karta hai
+  const flowRef = db.ref(`users/${phoneId}/chatFlows/main_flow`);
+  const snapshot = await flowRef.once("value");
+
+  if (!snapshot.exists()) return null;
+
+  const flow = snapshot.val();
+  return { 
+    nodes: flow.nodes || [], 
+    edges: flow.edges || [] 
+  };
 }
 
 // ─── 2. Find the entry node: the one node nobody points TO ───
@@ -38,8 +50,6 @@ function resolveNextEdge(node: WhatsAppNode, signal: IncomingSignal, graph: Flow
   }
 
   if (node.data.type === "list" && signal.type === "list_reply") {
-    // NOTE: ListNode abhi per-row handles expose nahi karta (sirf "default").
-    // Buttons wala hi pattern list rows par bhi lagao: id={`row-${row.id}`} — 15 min ka fix hai.
     const handleId = `row-${signal.value}`;
     return outgoing.find((e) => e.sourceHandle === handleId) ?? outgoing.find((e) => e.sourceHandle === "default") ?? outgoing[0];
   }
@@ -48,7 +58,7 @@ function resolveNextEdge(node: WhatsAppNode, signal: IncomingSignal, graph: Flow
   return outgoing.find((e) => e.sourceHandle === "default") ?? outgoing[0];
 }
 
-// ─── 4. Render + send a node's content via Meta API, return true if it PAUSES (waits for reply) ───
+// ─── 4. Render + send a node's content via Meta API, return true if PAUSES ───
 async function renderNode(node: WhatsAppNode, phoneId: string, to: string): Promise<boolean> {
   const data = node.data as WhatsAppNodeData;
 
@@ -102,17 +112,23 @@ async function renderNode(node: WhatsAppNode, phoneId: string, to: string): Prom
 
 // ─── 5. THE ENGINE — call this from the webhook ───
 export async function runFlowEngine(phoneId: string, from: string, signal: IncomingSignal) {
-  const graph = await getActiveFlow();
-  if (!graph) return; // no published flow — do nothing, let human agent handle it
+  const graph = await getActiveFlow(phoneId);
+  if (!graph) return; // no published flow — do nothing
 
-  const contact = await db.contact.findUnique({ where: { phoneNumber: from } });
+  const db = getDb();
+  // Fetch contact's current chat info (to get the cursor/active flow node)
+  const contactInfoRef = db.ref(`chats/${phoneId}/${from}/info`);
+  const contactSnap = await contactInfoRef.once("value");
+  const contactInfo = contactSnap.val() || {};
+  
   let currentNode: WhatsAppNode | null = null;
 
-  if (!contact?.activeFlowNodeId) {
-    // Fresh conversation — start at entry node regardless of what they typed
+  if (!contactInfo.activeFlowNodeId) {
+    // Fresh conversation — start at entry node
     currentNode = findEntryNode(graph);
   } else {
-    const cursor = graph.nodes.find((n) => n.id === contact.activeFlowNodeId) ?? null;
+    // Resume from where the user left off
+    const cursor = graph.nodes.find((n) => n.id === contactInfo.activeFlowNodeId) ?? null;
     if (cursor) {
       const edge = resolveNextEdge(cursor, signal, graph);
       currentNode = edge ? graph.nodes.find((n) => n.id === edge.target) ?? null : null;
@@ -123,13 +139,13 @@ export async function runFlowEngine(phoneId: string, from: string, signal: Incom
   while (currentNode) {
     const paused = await renderNode(currentNode, phoneId, from);
 
-    await db.contact.upsert({
-      where: { phoneNumber: from },
-      update: { activeFlowNodeId: paused ? currentNode.id : null },
-      create: { phoneNumber: from, activeFlowNodeId: paused ? currentNode.id : null },
+    // Save state directly back to the Firebase chats info node
+    await contactInfoRef.update({
+      activeFlowNodeId: paused ? currentNode.id : null,
+      updatedAt: Date.now()
     });
 
-    if (paused) return; // stop and wait for the next inbound message
+    if (paused) return; // stop and wait for the next inbound message (webhook)
 
     const nextEdge = graph.edges.find((e) => e.source === currentNode!.id);
     currentNode = nextEdge ? graph.nodes.find((n) => n.id === nextEdge.target) ?? null : null;
