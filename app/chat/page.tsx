@@ -130,7 +130,7 @@ export default function ChatPage() {
       alert("Meta API credentials missing. Please configure them in Settings.");
       return null;
     }
-    return { uid: user.uid, contactId: activeContact.id, recipientPhone: activeContact.phone, config };
+    return { uid: user.uid, contactId: activeContact.id, recipientPhone: activeContact.phoneNumber, config };
   };
 
   // ─── Send actions — all delegate to chatLogic, no direct API calls here ─
