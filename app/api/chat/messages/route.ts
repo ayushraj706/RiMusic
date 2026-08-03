@@ -1,4 +1,3 @@
-// App/api/chat/messages/route.ts
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 
@@ -20,7 +19,18 @@ export async function GET(req: Request) {
       orderBy: { timestamp: "asc" },
     });
 
-    return NextResponse.json(messages);
+    // 🔥 FIX: Prisma database ke format ko Frontend UI ke format me map kar rahe hain
+    const formattedMessages = messages.map((msg) => ({
+      id: msg.id,
+      text: msg.body, // 'body' ko 'text' bana diya taaki blank bubble na aaye
+      sender: msg.direction === "OUTBOUND" ? "me" : "them", // 'direction' ko 'me/them' banaya taaki Right/Left alignment sahi ho
+      time: new Date(msg.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      status: msg.status.toLowerCase(), // 'SENT' ko 'sent' kar diya ticks ke liye
+      type: msg.type.toLowerCase(),
+      mediaUrl: msg.mediaUrl,
+    }));
+
+    return NextResponse.json(formattedMessages);
   } catch (error) {
     console.error("Error fetching messages:", error);
     return NextResponse.json({ error: "Failed to fetch messages" }, { status: 500 });
@@ -70,12 +80,12 @@ export async function POST(req: Request) {
 
     const newMsg = await prisma.message.create({
       data: {
-        id: metaMessageId, // Meta se aaya asli ID (wamid) save karo ticks ke liye
+        id: metaMessageId, 
         contactId: contactId,
         body: msgBody,
         type: "TEXT",
         direction: "OUTBOUND",
-        status: "SENT", // Abhi sent hua hai, Webhook isko Delivered/Read me badlega
+        status: "SENT", 
         timestamp: new Date(),
       },
     });
@@ -86,7 +96,18 @@ export async function POST(req: Request) {
       data: { lastMessageAt: new Date() },
     });
 
-    return NextResponse.json({ success: true, message: newMsg });
+    // 🔥 FIX: Jo naya message save hua hai, usko bhi frontend format me convert karke bhejo
+    const formattedNewMsg = {
+      id: newMsg.id,
+      text: newMsg.body,
+      sender: "me", // Humne bheja hai isliye "me"
+      time: new Date(newMsg.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      status: "sent",
+      type: "text",
+      mediaUrl: null,
+    };
+
+    return NextResponse.json({ success: true, message: formattedNewMsg });
   } catch (error) {
     console.error("Error sending message:", error);
     return NextResponse.json({ error: "Failed to send message" }, { status: 500 });
