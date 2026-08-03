@@ -2,16 +2,14 @@
 
 import React, { useState, useEffect } from "react";
 import Sidebar from "@/components/Sidebar"; 
-import { Code2, Key, Webhook, Copy, Check, Terminal, Eye, EyeOff, Plus, FileText, Database, Send, Trash2, Loader2, Zap } from "lucide-react";
-import { auth, database } from "@/lib/firebase"; 
-import { onAuthStateChanged } from "firebase/auth";
-import { ref, onValue, set, push, remove } from "firebase/database";
+import { Code2, Key, Copy, Check, Terminal, Eye, EyeOff, Plus, FileText, Database, Send, Trash2, Loader2, Zap, Clock } from "lucide-react";
 
 interface SavedAPI {
   id: string;
-  templateName: string;
-  apiKey: string;
-  createdAt: number;
+  name: string; // Template Name
+  token: string; // Asli API Key
+  expiresAt: string | null;
+  createdAt: string;
 }
 
 export default function DevelopersPage() {
@@ -23,45 +21,50 @@ export default function DevelopersPage() {
   const [accessToken, setAccessToken] = useState<string>("");
   const [phoneId, setPhoneId] = useState<string>("");
   const [availableTemplates, setAvailableTemplates] = useState<any[]>([]);
-  const [selectedTemplate, setSelectedTemplate] = useState("");
-  const [savedApis, setSavedApis] = useState<SavedAPI[]>([]);
   
+  const [selectedTemplate, setSelectedTemplate] = useState("");
+  const [expiryDays, setExpiryDays] = useState<number>(30); // 👈 Naya: Expiry Days State (Default 30 days)
+
+  const [savedApis, setSavedApis] = useState<SavedAPI[]>([]);
   const [loading, setLoading] = useState(true);
   const [testPhones, setTestPhones] = useState<{ [key: string]: string }>({});
   const [sendingStatus, setSendingStatus] = useState<{ [key: string]: boolean }>({});
 
   const apiUrl = "https://superkey-app.vercel.app/api/v1/trigger";
 
+  // 🚀 UPDATE: Prisma Database Se Data Laane Ka Naya Logic
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        const configRef = ref(database, `users/${user.uid}/config`);
-        onValue(configRef, (snapshot) => {
-          if (snapshot.exists()) {
-            const data = snapshot.val();
-            setWabaId(data.wabaId);
-            setAccessToken(data.accessToken);
-            setPhoneId(data.phoneId);
-            fetchTemplatesFromMeta(data.wabaId, data.accessToken);
+    const fetchInitialData = async () => {
+      try {
+        // 1. WhatsApp Config Fetch karo
+        const configRes = await fetch("/api/config");
+        if (configRes.ok) {
+          const configData = await configRes.json();
+          // Prisma mein jo single row hai usko padh rahe hain
+          const settings = configData.settings || configData; 
+          
+          if (settings.businessAccountId) {
+            setWabaId(settings.businessAccountId);
+            setAccessToken(settings.accessToken);
+            setPhoneId(settings.phoneNumberId);
+            fetchTemplatesFromMeta(settings.businessAccountId, settings.accessToken);
           }
-        });
+        }
 
-        const apiRef = ref(database, `users/${user.uid}/apiKeys`);
-        onValue(apiRef, (snapshot) => {
-          if (snapshot.exists()) {
-            const apisArray: SavedAPI[] = [];
-            snapshot.forEach((child: any) => {
-              apisArray.push({ id: child.key, ...child.val() });
-            });
-            setSavedApis(apisArray.reverse());
-          } else {
-            setSavedApis([]);
-          }
-          setLoading(false);
-        });
+        // 2. Apni Prisma API Keys Fetch karo
+        const keysRes = await fetch("/api/keys");
+        if (keysRes.ok) {
+          const keysData = await keysRes.json();
+          setSavedApis(keysData);
+        }
+      } catch (error) {
+        console.error("Error loading data:", error);
+      } finally {
+        setLoading(false);
       }
-    });
-    return () => unsubscribe();
+    };
+
+    fetchInitialData();
   }, []);
 
   const fetchTemplatesFromMeta = async (waba: string, token: string) => {
@@ -72,13 +75,11 @@ export default function DevelopersPage() {
       const result = await response.json();
       if (result.data) {
         const approved = result.data.filter((t: any) => t.status === "APPROVED");
-        
         const uniqueTemplatesMap = new Map();
         approved.forEach((t: any) => {
            if(!uniqueTemplatesMap.has(t.name)) uniqueTemplatesMap.set(t.name, t);
         });
         const uniqueTemplates = Array.from(uniqueTemplatesMap.values());
-        
         setAvailableTemplates(uniqueTemplates);
         if (uniqueTemplates.length > 0) {
           setSelectedTemplate(uniqueTemplates[0].name);
@@ -101,54 +102,51 @@ export default function DevelopersPage() {
     setVisibleKeys((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
-  // 🚀 UPDATE: Dummy Data Logic Added Here
+  // 🚀 UPDATE: Prisma Backend par Save karna
   const generateNewApi = async () => {
-    if (!selectedTemplate || !auth.currentUser) return;
+    if (!selectedTemplate) return;
     
-    const newKey = "bk_live_" + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-    
-    const apiData = {
-      templateName: selectedTemplate,
-      apiKey: newKey,
-      createdAt: Date.now(),
-    };
-
     try {
-      const userId = auth.currentUser.uid;
-      
-      // 1. Firebase को फोल्डर बनाने के लिए मजबूर करने के लिए Dummy Data डालना
-      await set(ref(database, `apiKeysMap/_init`), {
-        dummy_data: "This keeps the folder alive",
-        timestamp: Date.now()
+      const res = await fetch("/api/keys", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          templateName: selectedTemplate,
+          expiryDays: expiryDays, // Kitne din mein expire hogi
+        }),
       });
 
-      // 2. यूज़र के प्रोफाइल में की (Key) सेव करना
-      const newListRef = push(ref(database, `users/${userId}/apiKeys`));
-      const keyId = newListRef.key;
-      await set(newListRef, apiData);
-
-      // 3. असली API Key को apiKeysMap में सेव करना (बैकएंड के लिए)
-      await set(ref(database, `apiKeysMap/${newKey}`), {
-        uid: userId,
-        keyId: keyId
-      });
-
-      alert("New API Key Generated Successfully!");
+      if (res.ok) {
+        const newApi = await res.json();
+        setSavedApis([newApi, ...savedApis]); // List update karo
+        alert("New API Key Generated Successfully!");
+      } else {
+        alert("Failed to generate API Key.");
+      }
     } catch (error: any) {
-      console.error("Firebase Write Error:", error);
-      alert(`Failed! Error: ${error.message}. (Firebase Rules Check Karo)`);
+      console.error("Database Write Error:", error);
+      alert("Error saving to database.");
     }
   };
 
-  const deleteApi = async (id: string, apiKey: string) => {
-    if (!auth.currentUser) return;
-    if(confirm("Are you sure you want to revoke this API Key? Any app using it will stop working.")){
+  // 🚀 UPDATE: Prisma Backend se Delete/Revoke karna
+  const deleteApi = async (id: string) => {
+    if(confirm("Are you sure you want to revoke and delete this API Key? Any app using it will stop working immediately.")){
       try {
-        await remove(ref(database, `users/${auth.currentUser.uid}/apiKeys/${id}`));
-        await remove(ref(database, `apiKeysMap/${apiKey}`));
+        const res = await fetch("/api/keys", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id }),
+        });
+
+        if (res.ok) {
+          setSavedApis(savedApis.filter((api) => api.id !== id));
+        } else {
+          alert("Failed to delete API Key.");
+        }
       } catch (error: any) {
-        console.error("Firebase Delete Error:", error);
-        alert(`Failed to revoke API Key: ${error.message}`);
+        console.error("Database Delete Error:", error);
+        alert("Failed to revoke API Key");
       }
     }
   };
@@ -171,12 +169,18 @@ export default function DevelopersPage() {
       return;
     }
 
+    // Check expiry before testing locally
+    if (api.expiresAt && new Date(api.expiresAt) < new Date()) {
+      alert("This API Key has expired!");
+      return;
+    }
+
     setSendingStatus({ ...sendingStatus, [api.id]: true });
 
-    const tplDef = availableTemplates.find(t => t.name === api.templateName);
+    const tplDef = availableTemplates.find(t => t.name === api.name);
     let dynamicComponents: any[] = [];
     
-    const dummyVars = getDummyVariables(api.templateName);
+    const dummyVars = getDummyVariables(api.name);
     if (dummyVars.length > 0) {
        dynamicComponents.push({
          type: "body",
@@ -196,7 +200,7 @@ export default function DevelopersPage() {
           to: phone,
           type: "template",
           template: {
-            name: api.templateName,
+            name: api.name,
             language: { code: tplDef ? tplDef.language : "en_US" },
             ...(dynamicComponents.length > 0 && { components: dynamicComponents })
           }
@@ -229,17 +233,18 @@ export default function DevelopersPage() {
               <Code2 className="w-6 h-6 text-[#00A884]" />
               Developers & API
             </h1>
-            <p className="text-sm text-gray-500 mt-1">Manage API keys, webhooks, and trigger templates.</p>
+            <p className="text-sm text-gray-500 mt-1">Manage API keys, expiry limits, and trigger templates.</p>
           </div>
         </div>
 
         <div className="p-6 max-w-5xl mx-auto w-full flex-1 flex flex-col gap-6">
           
+          {/* Base URL Section */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
             <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2 mb-2">
               <Zap className="w-5 h-5 text-[#00A884]" /> BaseKey Trigger API Endpoint
             </h2>
-            <p className="text-sm text-gray-500 mb-4">Use this base URL to trigger template messages from your backend or GitHub Actions.</p>
+            <p className="text-sm text-gray-500 mb-4">Use this base URL to trigger template messages securely.</p>
             <div className="flex items-center gap-3 bg-gray-50 p-3 rounded-xl border border-gray-200">
               <input type="text" readOnly value={apiUrl} className="bg-transparent font-mono text-sm flex-1 text-gray-700 outline-none" />
               <button onClick={() => handleCopy(apiUrl, "apiUrl")} className="bg-white border border-gray-200 hover:bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition">
@@ -249,10 +254,13 @@ export default function DevelopersPage() {
             </div>
           </div>
 
+          {/* Generator Section */}
           <div className="bg-[#00A884]/5 rounded-2xl border border-[#00A884]/20 p-6 flex flex-col md:flex-row gap-4 items-end">
+            
+            {/* Template Select */}
             <div className="flex-1 w-full">
               <label className="text-sm font-bold text-gray-700 flex items-center gap-2 mb-2">
-                <FileText className="w-4 h-4 text-[#00A884]" /> Select Template to Generate API
+                <FileText className="w-4 h-4 text-[#00A884]" /> Select Template
               </label>
               {availableTemplates.length === 0 ? (
                 <div className="bg-white border border-gray-200 text-gray-400 text-sm rounded-xl px-4 py-3">
@@ -270,15 +278,34 @@ export default function DevelopersPage() {
                 </select>
               )}
             </div>
+
+            {/* Expiry Select (Naya Feature) */}
+            <div className="w-full md:w-48 shrink-0">
+              <label className="text-sm font-bold text-gray-700 flex items-center gap-2 mb-2">
+                <Clock className="w-4 h-4 text-[#00A884]" /> Expiry Limit
+              </label>
+              <select 
+                value={expiryDays}
+                onChange={(e) => setExpiryDays(Number(e.target.value))}
+                className="w-full bg-white border border-gray-200 text-gray-800 text-sm rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-[#00A884]/20 focus:border-[#00A884] shadow-sm font-medium"
+              >
+                <option value={7}>7 Days</option>
+                <option value={30}>30 Days</option>
+                <option value={90}>90 Days</option>
+                <option value={0}>Never Expire</option>
+              </select>
+            </div>
+
             <button 
               onClick={generateNewApi}
               disabled={availableTemplates.length === 0}
               className="w-full md:w-auto bg-[#00A884] hover:bg-[#009172] text-white px-6 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-sm transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Plus className="w-5 h-5" /> Generate API Key
+              <Plus className="w-5 h-5" /> Generate
             </button>
           </div>
 
+          {/* List of Active Keys */}
           <div className="space-y-4">
             <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
               <Database className="w-5 h-5 text-[#00A884]" /> Active API Keys
@@ -295,17 +322,24 @@ export default function DevelopersPage() {
             ) : (
               savedApis.map((api) => {
                 const currentPhone = testPhones[api.id] || "919876543210";
-                const requiredVars = getDummyVariables(api.templateName);
+                const requiredVars = getDummyVariables(api.name);
+                
+                // Expiry calculation check
+                const isExpired = api.expiresAt && new Date(api.expiresAt) < new Date();
                 
                 return (
-                <div key={api.id} className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                <div key={api.id} className={`bg-white rounded-2xl shadow-sm border overflow-hidden ${isExpired ? "border-red-200 opacity-75" : "border-gray-200"}`}>
                   
-                  <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+                  <div className={`px-6 py-4 border-b flex justify-between items-center ${isExpired ? "bg-red-50" : "bg-gray-50/50"}`}>
                     <div>
                       <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-1">Target Template</p>
-                      <p className="font-bold text-gray-900">{api.templateName}</p>
+                      <p className="font-bold text-gray-900 flex items-center gap-2">
+                        {api.name} 
+                        {isExpired && <span className="bg-red-100 text-red-600 text-[10px] px-2 py-0.5 rounded-full">EXPIRED</span>}
+                        {!isExpired && api.expiresAt && <span className="bg-orange-100 text-orange-600 text-[10px] px-2 py-0.5 rounded-full">Valid till: {new Date(api.expiresAt).toLocaleDateString()}</span>}
+                      </p>
                     </div>
-                    <button onClick={() => deleteApi(api.id, api.apiKey)} className="text-xs text-red-500 hover:bg-red-50 border border-transparent hover:border-red-100 px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1.5 transition">
+                    <button onClick={() => deleteApi(api.id)} className="text-xs text-red-500 hover:bg-red-50 border border-transparent hover:border-red-100 px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1.5 transition">
                       <Trash2 className="w-4 h-4" /> Revoke API
                     </button>
                   </div>
@@ -319,13 +353,13 @@ export default function DevelopersPage() {
                         <input 
                           type={visibleKeys[api.id] ? "text" : "password"} 
                           readOnly 
-                          value={api.apiKey} 
+                          value={api.token} 
                           className="bg-transparent font-mono text-sm flex-1 text-gray-800 outline-none select-all"
                         />
                         <button onClick={() => toggleKeyVisibility(api.id)} className="p-1.5 text-gray-400 hover:text-gray-700 transition">
                           {visibleKeys[api.id] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                         </button>
-                        <button onClick={() => handleCopy(api.apiKey, `key-${api.id}`)} className="bg-white border border-gray-200 hover:bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition">
+                        <button onClick={() => handleCopy(api.token, `key-${api.id}`)} disabled={isExpired} className="bg-white border border-gray-200 hover:bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition disabled:opacity-50">
                           {copiedStates[`key-${api.id}`] ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
                           {copiedStates[`key-${api.id}`] ? "Copied!" : "Copy"}
                         </button>
@@ -339,22 +373,20 @@ export default function DevelopersPage() {
                       <div className="flex flex-col sm:flex-row gap-3">
                         <input 
                           type="text"
-                          placeholder="Phone No. with Country Code (e.g. 917320041415)"
+                          placeholder="Phone No. with Country Code"
                           value={testPhones[api.id] || ""}
                           onChange={(e) => setTestPhones({...testPhones, [api.id]: e.target.value})}
-                          className="flex-1 bg-white border border-[#A7E9D1] text-gray-800 text-sm rounded-lg px-3 py-2.5 outline-none focus:border-[#00A884] shadow-sm"
+                          disabled={isExpired}
+                          className="flex-1 bg-white border border-[#A7E9D1] text-gray-800 text-sm rounded-lg px-3 py-2.5 outline-none focus:border-[#00A884] shadow-sm disabled:opacity-50"
                         />
                         <button 
                           onClick={() => handleTestSend(api)}
-                          disabled={sendingStatus[api.id]}
+                          disabled={sendingStatus[api.id] || isExpired}
                           className="bg-[#00A884] hover:bg-[#009172] text-white px-5 py-2.5 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-60"
                         >
                           {sendingStatus[api.id] ? <Loader2 className="w-4 h-4 animate-spin" /> : "Send Test"}
                         </button>
                       </div>
-                      <p className="text-[11px] text-[#075E54]/70 mt-2">
-                        * Note: If your Meta App is in Development Mode, you can only send tests to verified numbers.
-                      </p>
                     </div>
 
                     <div>
@@ -364,16 +396,16 @@ export default function DevelopersPage() {
                       <div className="relative group">
                         <pre className="bg-gray-900 text-green-400 p-4 rounded-xl text-xs font-mono overflow-x-auto whitespace-pre-wrap leading-relaxed">
 {`curl -X POST https://superkey-app.vercel.app/api/v1/trigger \\
-  -H "Authorization: Bearer ${visibleKeys[api.id] ? api.apiKey : "bk_live_************************"}" \\
+  -H "Authorization: Bearer ${visibleKeys[api.id] ? api.token : "bk_live_************************"}" \\
   -H "Content-Type: application/json" \\
   -d '{
-    "template": "${api.templateName}",
+    "template": "${api.name}",
     "phone": "${currentPhone}",
     "variables": ${JSON.stringify(requiredVars)}
   }'`}
                         </pre>
                         <button 
-                          onClick={() => handleCopy(`curl -X POST https://superkey-app.vercel.app/api/v1/trigger -H "Authorization: Bearer ${api.apiKey}" -H "Content-Type: application/json" -d '{"template": "${api.templateName}", "phone": "${currentPhone}", "variables": ${JSON.stringify(requiredVars)}}'`, `curl-${api.id}`)}
+                          onClick={() => handleCopy(`curl -X POST https://superkey-app.vercel.app/api/v1/trigger -H "Authorization: Bearer ${api.token}" -H "Content-Type: application/json" -d '{"template": "${api.name}", "phone": "${currentPhone}", "variables": ${JSON.stringify(requiredVars)}}'`, `curl-${api.id}`)}
                           className="absolute top-3 right-3 bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-lg text-xs font-semibold backdrop-blur-sm transition"
                         >
                           {copiedStates[`curl-${api.id}`] ? "Copied!" : "Copy Code"}
