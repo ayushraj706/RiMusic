@@ -67,8 +67,8 @@ export default function ConfigModal({ isOpen, onClose, onSuccess }: ConfigModalP
 
       const user = auth.currentUser;
       if (user) {
-        // 👇 FIREBASE KI JAGAH PRISMA/NEON API CALL
-        const res = await fetch("/api/settings", {
+        // 👇 YAHAN "/api/config" KAR DIYA HAI (Pehle /api/settings tha)
+        const res = await fetch("/api/config", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
