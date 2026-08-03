@@ -23,11 +23,44 @@ function timeLabel(ts?: number): string {
 export default function Sidebar({ contacts, activeContactId, onSelectContact, className = "" }: SidebarProps) {
   const [query, setQuery] = useState("");
 
+  // NAYA LOGIC: Plus icon se bina save kiye naya number start karne ke liye
+  const handleNewChat = () => {
+    const phone = window.prompt("Enter phone number with country code (e.g., 919876543210):");
+    if (phone && phone.trim()) {
+      // Sirf numbers nikalna, baaki special characters hata dena
+      const cleanPhone = phone.replace(/[^0-9]/g, ""); 
+      
+      if (cleanPhone) {
+        // Check karna ki kya ye number pehle se list mein hai
+        const existing = contacts.find(
+          (c) => c.phoneNumber === cleanPhone || c.id === cleanPhone
+        );
+        
+        if (existing) {
+          onSelectContact(existing);
+        } else {
+          // Agar naya hai, toh ek temporary contact banakar chat open kar dena
+          // Jab aap pehla message bhejenge, toh ye Firebase mein auto-save ho jayega
+          onSelectContact({
+            id: cleanPhone,
+            name: cleanPhone, // Naye number ke liye naam me bhi number dikhega
+            phoneNumber: cleanPhone,
+          });
+        }
+      }
+    }
+  };
+
   const filtered = useMemo(() => {
-    if (!query.trim()) return contacts;
+    // NAYA LOGIC: Contacts ko hamesha latest time (updatedAt) ke hisaab se sort karna
+    const sortedContacts = [...contacts].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+
+    if (!query.trim()) return sortedContacts;
     const q = query.trim().toLowerCase();
-    return contacts.filter(
-      (c) => c.name?.toLowerCase().includes(q) || c.phone?.toLowerCase().includes(q)
+    
+    // NAYA FIX: c.phone ki jagah c.phoneNumber kiya gaya hai
+    return sortedContacts.filter(
+      (c) => c.name?.toLowerCase().includes(q) || c.phoneNumber?.toLowerCase().includes(q)
     );
   }, [contacts, query]);
 
@@ -37,7 +70,8 @@ export default function Sidebar({ contacts, activeContactId, onSelectContact, cl
       <div className="bg-[#008069] text-white px-4 py-3 flex items-center justify-between shrink-0">
         <span className="font-bold text-lg">Chats</span>
         <div className="flex items-center gap-1">
-          <button className="p-2 hover:bg-white/20 rounded-full transition">
+          {/* NAYA LOGIC: handleNewChat function attach kar diya */}
+          <button onClick={handleNewChat} className="p-2 hover:bg-white/20 rounded-full transition" title="New Chat">
             <MessageSquarePlus className="w-5 h-5" />
           </button>
           <button className="p-2 hover:bg-white/20 rounded-full transition">
@@ -68,7 +102,9 @@ export default function Sidebar({ contacts, activeContactId, onSelectContact, cl
         ) : (
           filtered.map((contact) => {
             const isActive = contact.id === activeContactId;
-            const hasUnread = (contact.unreadCount ?? 0) > 0;
+            // NAYA FIX: unreadCount ki jagah 'unread' use kiya hai jo aapke DB format me hai
+            const hasUnread = (contact.unread ?? 0) > 0; 
+            
             return (
               <button
                 key={contact.id}
@@ -89,17 +125,19 @@ export default function Sidebar({ contacts, activeContactId, onSelectContact, cl
                     <span className={`text-[14px] truncate ${hasUnread ? "font-bold text-gray-900" : "font-semibold text-gray-800"}`}>
                       {contact.name}
                     </span>
+                    {/* NAYA FIX: lastMessageTime ki jagah updatedAt lagaya */}
                     <span className={`text-[11px] shrink-0 ${hasUnread ? "text-[#00A884] font-bold" : "text-gray-400"}`}>
-                      {timeLabel(contact.lastMessageTime)}
+                      {timeLabel(contact.updatedAt)} 
                     </span>
                   </div>
                   <div className="flex items-center justify-between gap-2 mt-0.5">
                     <span className={`text-[12.5px] truncate ${hasUnread ? "text-gray-800 font-medium" : "text-gray-500"}`}>
                       {contact.lastMessage || "No messages yet"}
                     </span>
+                    {/* NAYA: WhatsApp style unread badge */}
                     {hasUnread && (
                       <span className="shrink-0 min-w-[18px] h-[18px] px-1 rounded-full bg-[#00A884] text-white text-[10px] font-bold flex items-center justify-center">
-                        {contact.unreadCount}
+                        {contact.unread}
                       </span>
                     )}
                   </div>
