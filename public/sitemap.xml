@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+
+  <!-- Home Page -->
+  <url>
+    <loc>https://ayus.fun/</loc>
+    <lastmod>2026-08-05</lastmod>
+    <priority>1.0</priority>
+  </url>
+
+  <!-- Main App Pages -->
+  <url>
+    <loc>https://ayus.fun/campaigns</loc>
+    <lastmod>2026-08-05</lastmod>
+    <priority>0.8</priority>
+  </url>
+  
+  <url>
+    <loc>https://ayus.fun/chat</loc>
+    <lastmod>2026-08-05</lastmod>
+    <priority>0.8</priority>
+  </url>
+
+  <url>
+    <loc>https://ayus.fun/chatbot-builder</loc>
+    <lastmod>2026-08-05</lastmod>
+    <priority>0.8</priority>
+  </url>
+
+  <url>
+    <loc>https://ayus.fun/contacts</loc>
+    <lastmod>2026-08-05</lastmod>
+    <priority>0.8</priority>
+  </url>
+
+  <url>
+    <loc>https://ayus.fun/dashboard</loc>
+    <lastmod>2026-08-05</lastmod>
+    <priority>0.8</priority>
+  </url>
+
+  <url>
+    <loc>https://ayus.fun/developers</loc>
+    <lastmod>2026-08-05</lastmod>
+    <priority>0.8</priority>
+  </url>
+
+  <url>
+    <loc>https://ayus.fun/help</loc>
+    <lastmod>2026-08-05</lastmod>
+    <priority>0.8</priority>
+  </url>
+
+  <url>
+    <loc>https://ayus.fun/template</loc>
+    <lastmod>2026-08-05</lastmod>
+    <priority>0.8</priority>
+  </url>
+
+  <!-- Legal & Auth Pages -->
+  <url>
+    <loc>https://ayus.fun/login</loc>
+    <lastmod>2026-08-05</lastmod>
+    <priority>0.5</priority>
+  </url>
+
+  <url>
+    <loc>https://ayus.fun/privacy-policy</loc>
+    <lastmod>2026-08-05</lastmod>
+    <priority>0.5</priority>
+  </url>
+
+  <url>
+    <loc>https://ayus.fun/terms-of-service</loc>
+    <lastmod>2026-08-05</lastmod>
+    <priority>0.5</priority>
+  </url>
+
+</urlset>
