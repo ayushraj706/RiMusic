@@ -3,62 +3,73 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-// 1. GET: Saare agents ki list laane ke liye
+// 1. GET: Saare team members (Admin + Agents) ki list laane ke liye
 export async function GET() {
   try {
-    const agents = await prisma.user.findMany({
-      where: { role: "AGENT" }, // Sirf agents ko fetch karenge
+    // Yahan se 'where' condition hata di gayi hai taaki Admin aur Agent dono load ho sakein
+    const team = await prisma.user.findMany({
       orderBy: { createdAt: "desc" }
     });
-    return NextResponse.json(agents);
+    return NextResponse.json(team);
   } catch (error) {
+    console.error("GET Team Error:", error);
     return NextResponse.json({ error: "Failed to fetch team" }, { status: 500 });
   }
 }
 
-// 2. POST: Naya Agent add karne ke liye
+// 2. POST: Naya Team Member (Admin ya Agent) add karne ke liye
 export async function POST(req: Request) {
   try {
-    const { name, email, password } = await req.json();
+    // Frontend se naye fields receive karna (Role, Access, etc.)
+    const { name, email, password, role, allowedPages, primaryPage } = await req.json();
 
     if (!name || !email || !password) {
       return NextResponse.json({ error: "Name, email, and password are required!" }, { status: 400 });
     }
 
-    // Check agar email pehle se exist karti hai
+    // Check agar email pehle se database mein exist karti hai
     const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) {
       return NextResponse.json({ error: "This email is already in use!" }, { status: 400 });
     }
 
-    // Database mein Agent save karna
-    const newAgent = await prisma.user.create({
+    // Database mein naya user save karna advanced settings ke sath
+    const newMember = await prisma.user.create({
       data: {
         name,
         email,
-        passwordHash: password, // Note: Future mein hum isko Bcrypt se secure (hash) karenge
-        role: "AGENT",
-        status: "OFFLINE"
+        passwordHash: password, 
+        role: role || "AGENT", // Default to Agent
+        allowedPages: allowedPages && allowedPages.length > 0 ? allowedPages : ["/chat", "/contacts"],
+        primaryPage: primaryPage || "/chat",
+        status: "OFFLINE",
+        currentActivity: "Account Created" // Live tracking system ke liye default tag
       }
     });
 
-    return NextResponse.json(newAgent);
+    return NextResponse.json(newMember);
   } catch (error) {
-    return NextResponse.json({ error: "Failed to create agent" }, { status: 500 });
+    console.error("POST Team Error:", error);
+    return NextResponse.json({ error: "Failed to create team member" }, { status: 500 });
   }
 }
 
-// 3. DELETE: Agent ko system se hatane ke liye
+// 3. DELETE: Kisi bhi user (Admin/Agent) ko system se hatane ke liye
 export async function DELETE(req: Request) {
   try {
     const { id } = await req.json();
     
+    if (!id) {
+      return NextResponse.json({ error: "User ID is required" }, { status: 400 });
+    }
+
     await prisma.user.delete({
       where: { id }
     });
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    return NextResponse.json({ error: "Failed to delete agent" }, { status: 500 });
+    console.error("DELETE Team Error:", error);
+    return NextResponse.json({ error: "Failed to delete member" }, { status: 500 });
   }
 }
