@@ -84,6 +84,8 @@ export default function ConfigModal({ isOpen, onClose, onSuccess }: ConfigModalP
         if (res.ok) {
           onSuccess(); 
           onClose(); 
+          // 🔥 NAYA: API connect hote hi page refresh kar dega taaki Sidebar update ho jaye
+          window.location.reload(); 
         } else {
           alert("Failed to save configuration in Database.");
         }
