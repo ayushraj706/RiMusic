@@ -26,7 +26,12 @@ model User {
   email            String       @unique
   passwordHash     String       // Login ke liye
   role             UserRole     @default(AGENT) // ADMIN ya AGENT
-  status           AgentStatus  @default(OFFLINE) // Dashboard track karega: ONLINE, BUSY, OFFLINE
+  status           AgentStatus  @default(OFFLINE) // ONLINE, BUSY, OFFLINE
+  
+  // 🔥 NAYA: Advanced Access Control & Tracking (Naye fields yahan add kiye gaye hain)
+  allowedPages     String[]     @default(["/chat", "/contacts"]) // Kaun se pages ka access hai
+  primaryPage      String       @default("/chat") // Login karte hi kahan jayega
+  currentActivity  String?      @default("Idle") // Live Tracking: "Chatting with Rahul", "On Dashboard"
   
   // Relations: Is agent ke paas kya-kya hai?
   assignedContacts Contact[]    // Kitne customers isko assign hain
