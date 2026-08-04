@@ -19,30 +19,33 @@ model SystemSettings {
   updatedAt           DateTime @updatedAt
 }
 
-// 🔥 UPDATE: 2. Users (Admin aur Agents) Ka Data (NextAuth ke liye update kiya)
+// 🔥 UPDATE: 2. Users (Admin aur Agents) Ka Data
 model User {
   id               String       @id @default(uuid())
   name             String?      // Optional: Google/GitHub se naam na aane par crash na ho
   email            String?      @unique // Optional: Kyunki GitHub/Twitter email hide kar sakte hain
-  emailVerified    DateTime?    // 🔥 NAYA: NextAuth require karta hai email verification time
-  image            String?      // 🔥 NAYA: Social Login se aayi hui Profile Photo ke liye
-  passwordHash     String?      // Optional: Kyunki Google/Facebook login mein password nahi hota
+  emailVerified    DateTime?    
+  image            String?      
+  passwordHash     String?      
   
-  role             UserRole     @default(AGENT) // ADMIN ya AGENT
-  status           AgentStatus  @default(OFFLINE) // ONLINE, BUSY, OFFLINE
+  role             UserRole     @default(AGENT) 
+  status           AgentStatus  @default(OFFLINE) 
   
   // Advanced Access Control & Tracking
-  allowedPages     String[]     @default(["/chat", "/contacts"]) // Kaun se pages ka access hai
-  primaryPage      String       @default("/chat") // Login karte hi kahan jayega
-  currentActivity  String?      @default("Idle") // Live Tracking: "Chatting with Rahul"
+  allowedPages     String[]     @default(["/chat", "/contacts"]) 
+  primaryPage      String       @default("/chat") 
+  currentActivity  String?      @default("Idle") 
   
   // Relations: Is agent ke paas kya-kya hai?
   assignedContacts Contact[]    
   sentMessages     Message[]    
   notes            InternalNote[] 
   quickReplies     QuickReply[] 
+  
+  // 🔥 NAYA: Campaign ka relation add kiya
+  campaigns        Campaign[]
 
-  // 🔥 NAYA: NextAuth Relations (Inhi ke zariye Account Linking hoti hai)
+  // NextAuth Relations (Inhi ke zariye Account Linking hoti hai)
   accounts         Account[]
   sessions         Session[]
 
@@ -51,10 +54,9 @@ model User {
 }
 
 // ----------------------------------------------------------------------
-// 🔥 NAYA NEXTAUTH TABLES (Google, Facebook, GitHub, X ko ek karne ke liye)
+// NEXTAUTH TABLES (Google, Facebook, GitHub, X ko ek karne ke liye)
 // ----------------------------------------------------------------------
 
-// yeh table alag-alag social accounts (Google, FB) ko ek User se jodti hai
 model Account {
   id                 String  @id @default(cuid())
   userId             String
@@ -71,11 +73,9 @@ model Account {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  // Ek provider se ek hi account link ho sakta hai
   @@unique([provider, providerAccountId])
 }
 
-// Session table background login maintain karne ke liye
 model Session {
   id           String   @id @default(cuid())
   sessionToken String   @unique
@@ -84,7 +84,6 @@ model Session {
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-// OTP ya Magic Link ke liye (Future proofing)
 model VerificationToken {
   identifier String
   token      String   @unique
@@ -197,7 +196,7 @@ model ApiKey {
   updatedAt   DateTime  @updatedAt
 }
 
-// 10. Campaigns Model (Asli data save karne ke liye)
+// 🔥 NAYA: 10. Campaigns Model (WhatsApp Bulk Broadcasts ke liye)
 model Campaign {
   id          String   @id @default(uuid())
   name        String
