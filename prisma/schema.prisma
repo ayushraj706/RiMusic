@@ -19,29 +19,83 @@ model SystemSettings {
   updatedAt           DateTime @updatedAt
 }
 
-// 🔥 NAYA AGENT FEATURE: 2. Users (Admin aur Agents) Ka Data
+// 🔥 UPDATE: 2. Users (Admin aur Agents) Ka Data (NextAuth ke liye update kiya)
 model User {
   id               String       @id @default(uuid())
-  name             String
-  email            String       @unique
-  passwordHash     String       // Login ke liye
+  name             String?      // Optional: Google/GitHub se naam na aane par crash na ho
+  email            String?      @unique // Optional: Kyunki GitHub/Twitter email hide kar sakte hain
+  emailVerified    DateTime?    // 🔥 NAYA: NextAuth require karta hai email verification time
+  image            String?      // 🔥 NAYA: Social Login se aayi hui Profile Photo ke liye
+  passwordHash     String?      // Optional: Kyunki Google/Facebook login mein password nahi hota
+  
   role             UserRole     @default(AGENT) // ADMIN ya AGENT
   status           AgentStatus  @default(OFFLINE) // ONLINE, BUSY, OFFLINE
   
-  // 🔥 NAYA: Advanced Access Control & Tracking (Naye fields yahan add kiye gaye hain)
+  // Advanced Access Control & Tracking
   allowedPages     String[]     @default(["/chat", "/contacts"]) // Kaun se pages ka access hai
   primaryPage      String       @default("/chat") // Login karte hi kahan jayega
-  currentActivity  String?      @default("Idle") // Live Tracking: "Chatting with Rahul", "On Dashboard"
+  currentActivity  String?      @default("Idle") // Live Tracking: "Chatting with Rahul"
   
   // Relations: Is agent ke paas kya-kya hai?
-  assignedContacts Contact[]    // Kitne customers isko assign hain
-  sentMessages     Message[]    // Isne kitne messages bheje
-  notes            InternalNote[] // Isne kitne private notes likhe
-  quickReplies     QuickReply[] // Iske banaye hue shortcuts
+  assignedContacts Contact[]    
+  sentMessages     Message[]    
+  notes            InternalNote[] 
+  quickReplies     QuickReply[] 
+
+  // 🔥 NAYA: NextAuth Relations (Inhi ke zariye Account Linking hoti hai)
+  accounts         Account[]
+  sessions         Session[]
 
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
 }
+
+// ----------------------------------------------------------------------
+// 🔥 NAYA NEXTAUTH TABLES (Google, Facebook, GitHub, X ko ek karne ke liye)
+// ----------------------------------------------------------------------
+
+// yeh table alag-alag social accounts (Google, FB) ko ek User se jodti hai
+model Account {
+  id                 String  @id @default(cuid())
+  userId             String
+  type               String
+  provider           String
+  providerAccountId  String
+  refresh_token      String?  @db.Text
+  access_token       String?  @db.Text
+  expires_at         Int?
+  token_type         String?
+  scope              String?
+  id_token           String?  @db.Text
+  session_state      String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Ek provider se ek hi account link ho sakta hai
+  @@unique([provider, providerAccountId])
+}
+
+// Session table background login maintain karne ke liye
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// OTP ya Magic Link ke liye (Future proofing)
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ----------------------------------------------------------------------
+// PURANE TABLES (Inme koi badlaav nahi kiya gaya)
+// ----------------------------------------------------------------------
 
 // 3. WhatsApp Contacts (Customers)
 model Contact {
@@ -55,13 +109,12 @@ model Contact {
   isSessionActive  Boolean   @default(true) 
   activeFlowNodeId String?   
   
-  // 🔥 NAYA AGENT FEATURE: Chat Routing & Bot Handoff
-  assignedToId     String?   // Yeh customer kis Agent ko diya gaya hai
+  assignedToId     String?   
   assignedTo       User?     @relation(fields: [assignedToId], references: [id])
-  isBotPaused      Boolean   @default(false) // True matlab Bot chup rahega, Agent baat karega!
+  isBotPaused      Boolean   @default(false) 
   
   messages         Message[]
-  notes            InternalNote[] // Private notes is customer ke liye
+  notes            InternalNote[] 
   
   createdAt        DateTime  @default(now())
 }
@@ -72,8 +125,7 @@ model Message {
   contactId   String
   contact     Contact       @relation(fields: [contactId], references: [id], onDelete: Cascade)
   
-  // 🔥 NAYA AGENT FEATURE: Kis Agent ne yeh message bheja?
-  senderId    String?       // Agar null hai = Bot ne bheja. Agar ID hai = Agent ne bheja.
+  senderId    String?       
   sender      User?         @relation(fields: [senderId], references: [id])
 
   body        String        @default("") 
@@ -86,27 +138,27 @@ model Message {
   timestamp   DateTime      @default(now())
 }
 
-// 🔥 NAYA AGENT FEATURE: 5. Internal Private Notes (Jo customer ko nahi dikhenge)
+// 5. Internal Private Notes
 model InternalNote {
   id          String   @id @default(uuid())
-  content     String   // "Bhai is customer ko discount de do"
+  content     String   
   
   contactId   String
   contact     Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
   
-  authorId    String   // Kis Agent ne note likha
+  authorId    String   
   author      User     @relation(fields: [authorId], references: [id])
   
   createdAt   DateTime @default(now())
 }
 
-// 🔥 NAYA AGENT FEATURE: 6. Quick Replies (Canned Responses)
+// 6. Quick Replies (Canned Responses)
 model QuickReply {
   id          String   @id @default(uuid())
-  shortcut    String   @unique // Example: "/hello"
-  message     String   // Example: "Welcome to BaseKey CRM, how can I help you?"
+  shortcut    String   @unique 
+  message     String   
   
-  authorId    String?  // Agar null hai toh sab agents use kar sakte hain
+  authorId    String?  
   author      User?    @relation(fields: [authorId], references: [id])
   
   createdAt   DateTime @default(now())
@@ -147,7 +199,6 @@ model ApiKey {
 
 // --- ENUMS FOR STRICT DATA TYPING ---
 
-// 🔥 NAYA ENUM: User Roles & Status
 enum UserRole {
   ADMIN
   AGENT
