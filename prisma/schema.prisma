@@ -19,7 +19,26 @@ model SystemSettings {
   updatedAt           DateTime @updatedAt
 }
 
-// 2. WhatsApp Contacts (Chat Sidebar)
+// 🔥 NAYA AGENT FEATURE: 2. Users (Admin aur Agents) Ka Data
+model User {
+  id               String       @id @default(uuid())
+  name             String
+  email            String       @unique
+  passwordHash     String       // Login ke liye
+  role             UserRole     @default(AGENT) // ADMIN ya AGENT
+  status           AgentStatus  @default(OFFLINE) // Dashboard track karega: ONLINE, BUSY, OFFLINE
+  
+  // Relations: Is agent ke paas kya-kya hai?
+  assignedContacts Contact[]    // Kitne customers isko assign hain
+  sentMessages     Message[]    // Isne kitne messages bheje
+  notes            InternalNote[] // Isne kitne private notes likhe
+  quickReplies     QuickReply[] // Iske banaye hue shortcuts
+
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+}
+
+// 3. WhatsApp Contacts (Customers)
 model Contact {
   id               String    @id @default(uuid())
   phoneNumber      String    @unique 
@@ -30,28 +49,65 @@ model Contact {
   lastMessageAt    DateTime  @default(now())
   isSessionActive  Boolean   @default(true) 
   activeFlowNodeId String?   
+  
+  // 🔥 NAYA AGENT FEATURE: Chat Routing & Bot Handoff
+  assignedToId     String?   // Yeh customer kis Agent ko diya gaya hai
+  assignedTo       User?     @relation(fields: [assignedToId], references: [id])
+  isBotPaused      Boolean   @default(false) // True matlab Bot chup rahega, Agent baat karega!
+  
   messages         Message[]
+  notes            InternalNote[] // Private notes is customer ke liye
+  
   createdAt        DateTime  @default(now())
 }
 
-// 3. Messages Model (Analytics ke liye Upgrade kiya gaya)
+// 4. Messages Model (Chat & Analytics)
 model Message {
   id          String        @id 
   contactId   String
   contact     Contact       @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  
+  // 🔥 NAYA AGENT FEATURE: Kis Agent ne yeh message bheja?
+  senderId    String?       // Agar null hai = Bot ne bheja. Agar ID hai = Agent ne bheja.
+  sender      User?         @relation(fields: [senderId], references: [id])
+
   body        String        @default("") 
   type        MessageType   @default(TEXT) 
   direction   MessageDirection
   status      MessageStatus @default(SENT) 
   mediaUrl    String?       
-  
-  // NAYA: Analytics track karne ke liye (Message kahan se gaya?)
   source      MessageSource @default(CHAT) 
   
   timestamp   DateTime      @default(now())
 }
 
-// 4. Chatbot Flow
+// 🔥 NAYA AGENT FEATURE: 5. Internal Private Notes (Jo customer ko nahi dikhenge)
+model InternalNote {
+  id          String   @id @default(uuid())
+  content     String   // "Bhai is customer ko discount de do"
+  
+  contactId   String
+  contact     Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  
+  authorId    String   // Kis Agent ne note likha
+  author      User     @relation(fields: [authorId], references: [id])
+  
+  createdAt   DateTime @default(now())
+}
+
+// 🔥 NAYA AGENT FEATURE: 6. Quick Replies (Canned Responses)
+model QuickReply {
+  id          String   @id @default(uuid())
+  shortcut    String   @unique // Example: "/hello"
+  message     String   // Example: "Welcome to BaseKey CRM, how can I help you?"
+  
+  authorId    String?  // Agar null hai toh sab agents use kar sakte hain
+  author      User?    @relation(fields: [authorId], references: [id])
+  
+  createdAt   DateTime @default(now())
+}
+
+// 7. Chatbot Flow
 model ChatFlow {
   id        String   @id @default(uuid())
   name      String   @default("Default Flow")
@@ -61,7 +117,7 @@ model ChatFlow {
   updatedAt DateTime @updatedAt
 }
 
-// 5. NAYA: WhatsApp Templates (Media + Text + Buttons)
+// 8. WhatsApp Templates
 model Template {
   id          String   @id @default(uuid())
   name        String   @unique
@@ -73,18 +129,30 @@ model Template {
   updatedAt   DateTime @updatedAt
 }
 
-// 6. NAYA: API Keys Management (Expiry + Revoke + Template tracking)
+// 9. API Keys Management
 model ApiKey {
   id          String    @id @default(uuid())
-  name        String    // Linked Template ka naam
+  name        String    
   token       String    @unique 
-  expiresAt   DateTime? // Expiry date
-  isRevoked   Boolean   @default(false) // Emergency Kill Switch
+  expiresAt   DateTime? 
+  isRevoked   Boolean   @default(false) 
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 }
 
 // --- ENUMS FOR STRICT DATA TYPING ---
+
+// 🔥 NAYA ENUM: User Roles & Status
+enum UserRole {
+  ADMIN
+  AGENT
+}
+
+enum AgentStatus {
+  ONLINE
+  BUSY
+  OFFLINE
+}
 
 enum MessageType {
   TEXT
@@ -93,17 +161,16 @@ enum MessageType {
   AUDIO
   DOCUMENT
   INTERACTIVE
-  TEMPLATE // NAYA: Template messages track karne ke liye
-  LOCATION // NAYA: Location track karne ke liye
-  STICKER  // NAYA: Stickers track karne ke liye
+  TEMPLATE
+  LOCATION
+  STICKER
 }
 
-// NAYA: Analytics Source Tracking (Dashboard ke PDFs ke liye)
 enum MessageSource {
-  CHAT      // Chat dashboard se gaya
-  FLOW      // Flow Builder/Bot se gaya
-  API       // External Trigger API se gaya
-  CAMPAIGN  // Bulk Campaign se gaya
+  CHAT      
+  FLOW      
+  API       
+  CAMPAIGN  
 }
 
 enum MessageDirection {
