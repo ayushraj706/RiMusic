@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { auth } from "../lib/firebase"; // Sirf auth rakha hai user ID ke liye, DB hata diya
-import { X, Key, Phone, Link2, CheckCircle2, Copy, ShieldAlert, Check, Facebook, Loader2 } from "lucide-react";
+// 🔥 NAYA: Firebase hata kar NextAuth ka useSession import kiya
+import { useSession } from "next-auth/react"; 
+import { X, Key, Phone, Link2, CheckCircle2, Copy, ShieldAlert, Check, Facebook } from "lucide-react";
 
 interface ConfigModalProps {
   isOpen: boolean;
@@ -11,7 +12,9 @@ interface ConfigModalProps {
 }
 
 export default function ConfigModal({ isOpen, onClose, onSuccess }: ConfigModalProps) {
-  // 👇 Default ko 'manual' kar diya hai
+  // 🔥 NAYA: Session se logged-in user ka data nikalna
+  const { data: session } = useSession();
+
   const [setupMode, setSetupMode] = useState<"manual" | "auto">("manual");
   
   const [accessToken, setAccessToken] = useState("");
@@ -36,16 +39,15 @@ export default function ConfigModal({ isOpen, onClose, onSuccess }: ConfigModalP
       const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || window.location.origin;
       setWebhookUrl(`${baseUrl}/api/webhook`);
 
-      // Token Logic
-      const user = auth.currentUser;
-      if (user) {
-        const staticToken = "BASEKEY_" + user.uid.substring(0, 12).toUpperCase();
+      // 🔥 NAYA: Firebase ki jagah NextAuth Session ka user ID use kiya
+      if (session?.user?.id) {
+        const staticToken = "BASEKEY_" + session.user.id.substring(0, 12).toUpperCase();
         setVerifyToken(staticToken);
       } else {
         setVerifyToken("BASEKEY_TEMP_TOKEN");
       }
     }
-  }, [isOpen]);
+  }, [isOpen, session]);
 
   if (!isOpen) return null;
 
@@ -59,15 +61,14 @@ export default function ConfigModal({ isOpen, onClose, onSuccess }: ConfigModalP
 
     setLoading(true);
     try {
-      // Local storage mein backup ke liye rakh lete hain
+      // Local storage backup
       localStorage.setItem("metaAccessToken", accessToken);
       localStorage.setItem("phoneId", phoneId);
       localStorage.setItem("wabaId", wabaId);
       localStorage.setItem("webhookVerifyToken", verifyToken);
 
-      const user = auth.currentUser;
-      if (user) {
-        // 👇 YAHAN "/api/config" KAR DIYA HAI (Pehle /api/settings tha)
+      // 🔥 NAYA: session.user check kiya
+      if (session?.user) {
         const res = await fetch("/api/config", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -85,6 +86,8 @@ export default function ConfigModal({ isOpen, onClose, onSuccess }: ConfigModalP
         } else {
           alert("Failed to save configuration in Database.");
         }
+      } else {
+        alert("Authentication error: Please log in again.");
       }
     } catch (error) {
       console.error("Error saving config:", error);
