@@ -1,10 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { auth, database } from "../lib/firebase";
-import { ref, onValue } from "firebase/database";
-import { onAuthStateChanged } from "firebase/auth";
-// NAYA: useRouter import kiya hai redirect karne ke liye
+// 🔥 NAYA: Firebase hata kar NextAuth lagaya
+import { useSession, signOut } from "next-auth/react"; 
 import { usePathname, useRouter } from "next/navigation"; 
 import Link from "next/link";
 import {
@@ -24,12 +22,15 @@ import {
   ChevronRight,
   HelpCircle,
   Code2,
-  UserPlus, // NAYA: Team page icon ke liye
-  LogOut    // NAYA: Logout icon ke liye
+  UserPlus, 
+  LogOut    
 } from "lucide-react";
 import ConfigModal from "./ConfigModal";
 
 export default function Sidebar() {
+  // NextAuth se session nikal rahe hain
+  const { data: session, status } = useSession(); 
+  
   const [user, setUser] = useState<any>(null);
   const [isMatched, setIsMatched] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
@@ -37,59 +38,70 @@ export default function Sidebar() {
   const [collapsed, setCollapsed] = useState<boolean>(false);
   const [hideOnMobile, setHideOnMobile] = useState<boolean>(false);
 
-  // ─── NAYA: Roles aur Agent details manage karne ke liye ───
   const [userRole, setUserRole] = useState<"ADMIN" | "AGENT" | null>(null);
   const [agentName, setAgentName] = useState<string>("");
 
   const pathname = usePathname();
-  const router = useRouter(); // Router initialize kiya
+  const router = useRouter();
 
-  // Firebase Auth, Config Load & Agent LocalStorage Check
+  // Authentication aur API Config Load Check
   useEffect(() => {
-    // 1. Pehle check karo ki kya koi AGENT logged in hai?
-    if (typeof window !== "undefined") {
-      const agentToken = localStorage.getItem("agent_token");
-      const savedAgentName = localStorage.getItem("agent_name");
-      
-      if (agentToken) {
-        setUserRole("AGENT");
-        setAgentName(savedAgentName || "Support Agent");
-        setUser({ uid: agentToken }); // Dummy user banaya taaki aage ke error na aaye
-        setIsMatched(true); // Agent ko API config hamesha true manenge
-        setLoading(false);
-        return;
-      }
-    }
-
-    // 2. Agar Agent nahi hai, toh check karo kya ADMIN (Firebase) logged in hai?
-    const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
-      if (currentUser) {
-        setUserRole("ADMIN");
-        setUser(currentUser);
-        const userRef = ref(database, `users/${currentUser.uid}/config`);
-        const unsubscribeDB = onValue(userRef, (snapshot) => {
-          setIsMatched(snapshot.exists() && snapshot.val().isMatched);
+    const checkAuthAndConfig = async () => {
+      // 1. Pehle check karo ki kya koi AGENT (Local Storage) logged in hai?
+      if (typeof window !== "undefined") {
+        const agentToken = localStorage.getItem("agent_token");
+        const savedAgentName = localStorage.getItem("agent_name");
+        
+        if (agentToken) {
+          setUserRole("AGENT");
+          setAgentName(savedAgentName || "Support Agent");
+          setUser({ uid: agentToken }); 
+          setIsMatched(true); // Agent ko API config hamesha true manenge
           setLoading(false);
-        });
-        return () => unsubscribeDB();
+          return;
+        }
+      }
+
+      // 2. Agar NextAuth loading state mein hai toh wait karo
+      if (status === "loading") return;
+
+      // 3. Check karo kya ADMIN (NextAuth) logged in hai?
+      if (session?.user) {
+        setUserRole("ADMIN");
+        setUser(session.user);
+        
+        // 🔥 NAYA: Firebase Realtime DB ki jagah apne Prisma API se config check karo
+        try {
+          // (Yeh API route humein aage banana hoga jo SystemSettings table check karega)
+          const res = await fetch("/api/settings/check-config");
+          if (res.ok) {
+            const data = await res.json();
+            setIsMatched(data.isMatched);
+          } else {
+            setIsMatched(false);
+          }
+        } catch (error) {
+          setIsMatched(false);
+        }
+        
+        setLoading(false);
       } else {
+        // Koi login nahi hai
         setUserRole(null);
         setUser(null);
         setLoading(false);
       }
-    });
-    return () => unsubscribeAuth();
-  }, []);
+    };
 
-  // ─── NAYA LOGIC: Route Guard & Default Redirect ───
+    checkAuthAndConfig();
+  }, [session, status]);
+
+  // Route Guard & Default Redirect
   useEffect(() => {
-    // Jab loading khatam ho jaye tab check karo
     if (!loading) {
       if (!userRole) {
-        // 1. Bina login wale ko dhakka maar ke login page pe bhejo
         router.push("/login");
       } else if (pathname === "/") {
-        // 2. Agar logged in hai aur default URL (/) khola hai, toh Role ke hisab se bhejo
         router.push(userRole === "AGENT" ? "/chat" : "/dashboard");
       }
     }
@@ -111,16 +123,18 @@ export default function Sidebar() {
     return () => observer.disconnect();
   }, []);
 
-  // ─── NAYA: Logout Handler (Admin aur Agent dono ke liye) ───
+  // Logout Handler (Admin aur Agent dono ke liye)
   const handleLogout = async () => {
     if (confirm("Are you sure you want to log out?")) {
       if (userRole === "AGENT") {
         localStorage.removeItem("agent_token");
         localStorage.removeItem("agent_name");
+        localStorage.removeItem("agent_role");
+        localStorage.removeItem("agent_primary_page");
         router.push("/login");
       } else {
-        await auth.signOut();
-        router.push("/login");
+        // 🔥 NAYA: NextAuth ka logout function
+        await signOut({ callbackUrl: "/login" });
       }
     }
   };
@@ -128,7 +142,6 @@ export default function Sidebar() {
   const isActive = (paths: string[]) =>
     paths.some((p) => pathname === p || pathname?.startsWith(p + "/"));
 
-  // ─── NAYA: Roles define kiye gaye hain har page ke liye ───
   const rawNavItems = [
     { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard", activePaths: ["/dashboard"], roles: ["ADMIN"] },
     { href: "/campaigns", icon: Megaphone, label: "Campaigns", activePaths: ["/campaigns"], roles: ["ADMIN"] },
@@ -136,7 +149,7 @@ export default function Sidebar() {
     { href: "/chatbot-builder", icon: GitFork, label: "Flows", activePaths: ["/chatbot-builder"], roles: ["ADMIN"] },
     { href: "/template", icon: LayoutTemplate, label: "Templates", activePaths: ["/template"], roles: ["ADMIN"] },
     { href: "/contacts", icon: Users, label: "Contacts", activePaths: ["/contacts"], roles: ["ADMIN", "AGENT"] },
-    { href: "/dashboard/team", icon: UserPlus, label: "Team", activePaths: ["/dashboard/team"], roles: ["ADMIN"] }, // Added Team Page
+    { href: "/dashboard/team", icon: UserPlus, label: "Team", activePaths: ["/dashboard/team"], roles: ["ADMIN"] },
   ];
 
   const rawBottomItems = [
@@ -145,18 +158,15 @@ export default function Sidebar() {
     { href: "/help", icon: HelpCircle, label: "Help Center", activePaths: ["/help"], roles: ["ADMIN", "AGENT"] },
   ];
 
-  // Sirf wahi options filter karke nikalenge jiska Access Current Role ko hai
   const navItems = rawNavItems.filter(item => item.roles.includes(userRole || ""));
   const bottomItems = rawBottomItems.filter(item => item.roles.includes(userRole || ""));
 
-  if (loading) {
+  if (loading || status === "loading") {
     return (
       <>
-        {/* Desktop skeleton */}
         <div className="hidden md:flex flex-col h-full w-[220px] bg-white border-r border-gray-100 items-center justify-center">
           <Loader2 className="w-5 h-5 animate-spin text-[#25D366]" />
         </div>
-        {/* Mobile skeleton */}
         <div className="md:hidden fixed bottom-0 left-0 z-30 w-full h-16 border-t border-gray-100 bg-white flex items-center justify-center">
           <Loader2 className="w-5 h-5 animate-spin text-[#25D366]" />
         </div>
@@ -164,20 +174,15 @@ export default function Sidebar() {
     );
   }
 
-  // Agar user null hai aur redirect ho raha hai, toh null return kardo taaki UI flash na ho
   if (!userRole) return null; 
 
   return (
     <>
-      {/* ================================================ */}
-      {/* DESKTOP SIDEBAR — Collapsible                    */}
-      {/* ================================================ */}
       <aside
         className={`hidden md:flex flex-col h-full bg-white border-r border-gray-100 z-40 shrink-0 transition-all duration-300 ease-in-out ${
           collapsed ? "w-[64px]" : "w-[220px]"
         }`}
       >
-        {/* Logo / Brand */}
         <div
           className={`flex items-center h-14 border-b border-gray-100 px-3 shrink-0 ${
             collapsed ? "justify-center" : "justify-between"
@@ -213,7 +218,6 @@ export default function Sidebar() {
           </button>
         </div>
 
-        {/* Main nav */}
         <div className="flex-1 flex flex-col py-3 overflow-y-auto no-scrollbar gap-0.5 px-2">
           {isMatched ? (
             <>
@@ -275,7 +279,6 @@ export default function Sidebar() {
           )}
         </div>
 
-        {/* Bottom section */}
         <div className={`flex flex-col pb-4 pt-2 border-t border-gray-100 gap-0.5 px-2`}>
           {bottomItems.map((item) => {
             const active = isActive(item.activePaths);
@@ -301,7 +304,6 @@ export default function Sidebar() {
             );
           })}
 
-          {/* Config Button - SIRF ADMIN KO DIKHEGA */}
           {userRole === "ADMIN" && (
             <div
               className={`flex items-center gap-3 rounded-lg px-2.5 py-2 cursor-pointer transition-all duration-150 text-gray-400 hover:bg-gray-50 hover:text-gray-600 ${
@@ -319,7 +321,6 @@ export default function Sidebar() {
             </div>
           )}
 
-          {/* ─── NAYA: User Profile & Logout (Agent/Admin Dono ke liye) ─── */}
           <div
             onClick={handleLogout}
             className={`group flex items-center gap-2.5 mt-1 px-2 py-1.5 rounded-lg hover:bg-red-50 cursor-pointer transition-colors ${
@@ -328,16 +329,16 @@ export default function Sidebar() {
             title={collapsed ? "Logout" : undefined}
           >
             <div className="w-8 h-8 rounded-full bg-[#e8faf0] group-hover:bg-red-100 border border-[#b7e8cc] group-hover:border-red-200 flex items-center justify-center text-sm font-bold text-[#1a9e4e] group-hover:text-red-500 shrink-0 overflow-hidden transition-colors">
-              {userRole === "ADMIN" && user?.photoURL ? (
-                <img src={user.photoURL} alt="User" className="w-full h-full object-cover" />
+              {userRole === "ADMIN" && user?.image ? (
+                <img src={user.image} alt="User" className="w-full h-full object-cover" />
               ) : (
-                (userRole === "AGENT" ? agentName : user?.email)?.charAt(0).toUpperCase() || "U"
+                (userRole === "AGENT" ? agentName : user?.name || user?.email)?.charAt(0).toUpperCase() || "U"
               )}
             </div>
             {!collapsed && (
               <div className="flex flex-col overflow-hidden">
                 <span className="text-[12px] font-semibold text-gray-800 group-hover:text-red-600 truncate leading-tight transition-colors">
-                  {userRole === "ADMIN" ? (user?.displayName || user?.email?.split("@")[0] || "Owner") : agentName}
+                  {userRole === "ADMIN" ? (user?.name || user?.email?.split("@")[0] || "Owner") : agentName}
                 </span>
                 <span className="text-[10px] text-gray-400 group-hover:text-red-400 truncate leading-tight transition-colors">
                   {userRole === "ADMIN" ? (user?.email || "Admin") : "Support Agent"}
@@ -346,7 +347,6 @@ export default function Sidebar() {
             )}
             {!collapsed && isMatched && (
               <>
-                {/* Default dikhega CheckCircle, Hover par dikhega Logout */}
                 <CheckCircle2 className="w-3.5 h-3.5 text-[#25D366] ml-auto shrink-0 group-hover:hidden" />
                 <LogOut className="w-3.5 h-3.5 text-red-500 ml-auto shrink-0 hidden group-hover:block" />
               </>
@@ -358,9 +358,6 @@ export default function Sidebar() {
         </div>
       </aside>
 
-      {/* ================================================ */}
-      {/* MOBILE BOTTOM BAR                                */}
-      {/* ================================================ */}
       <nav
         className={`md:hidden fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-gray-100 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] transition-all duration-300 ease-in-out ${
           hideOnMobile
@@ -400,7 +397,6 @@ export default function Sidebar() {
                 );
               })}
 
-              {/* ─── NAYA: Mobile par Settings aur Config sirf ADMIN ko dikhenge ─── */}
               {userRole === "ADMIN" && (
                 <>
                   <Link href="/settings" className="flex-1 min-w-[70px] shrink-0">
@@ -435,7 +431,6 @@ export default function Sidebar() {
               </div>
               <p className="text-sm text-gray-500 font-medium">API Not Connected</p>
               
-              {/* Connect Button sirf Admin ko mobile par dikhega */}
               {userRole === "ADMIN" && (
                 <button
                   onClick={() => setIsModalOpen(true)}
@@ -450,7 +445,6 @@ export default function Sidebar() {
         <div className="h-[env(safe-area-inset-bottom)] bg-white" />
       </nav>
 
-      {/* Config Modal sirf Admin ke liye render hoga */}
       {userRole === "ADMIN" && (
         <ConfigModal
           isOpen={isModalOpen}
