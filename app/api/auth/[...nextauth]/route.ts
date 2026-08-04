@@ -18,18 +18,21 @@ const handler = NextAuth({
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID as string,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
+      allowDangerousEmailAccountLinking: true, // 🔥 NAYA: Same email wale accounts ko jodne dega
     }),
     
     // 2. GitHub Setup
     GithubProvider({
       clientId: process.env.GITHUB_ID as string,
       clientSecret: process.env.GITHUB_SECRET as string,
+      allowDangerousEmailAccountLinking: true, // 🔥 NAYA
     }),
     
     // 3. Facebook Setup
     FacebookProvider({
       clientId: process.env.FACEBOOK_CLIENT_ID as string,
       clientSecret: process.env.FACEBOOK_CLIENT_SECRET as string,
+      allowDangerousEmailAccountLinking: true, // 🔥 NAYA
     }),
     
     // 4. X (Twitter) Setup
@@ -37,6 +40,7 @@ const handler = NextAuth({
       clientId: process.env.TWITTER_CLIENT_ID as string,
       clientSecret: process.env.TWITTER_CLIENT_SECRET as string,
       version: "2.0",
+      allowDangerousEmailAccountLinking: true, // 🔥 NAYA
     }),
   ],
   
@@ -104,9 +108,9 @@ const handler = NextAuth({
     // Session mein data frontend ke liye bhejna
     async session({ session, token }: any) {
       if (session.user) {
-        session.user.id = token.id;
-        session.user.role = token.role;
-        session.user.primaryPage = token.primaryPage;
+        session.user.id = token.id as string;
+        session.user.role = token.role as string;
+        session.user.primaryPage = token.primaryPage as string;
       }
       return session;
     },
