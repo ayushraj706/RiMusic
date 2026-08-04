@@ -1,463 +1,328 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { auth, database } from "../lib/firebase";
-import { ref, onValue } from "firebase/database";
-import { onAuthStateChanged } from "firebase/auth";
-// NAYA: useRouter import kiya hai redirect karne ke liye
-import { usePathname, useRouter } from "next/navigation"; 
-import Link from "next/link";
-import {
-  MessageSquare,
-  Settings,
-  AlertCircle,
-  CheckCircle2,
-  Loader2,
-  Link2,
-  Bot,
-  LayoutTemplate,
-  LayoutDashboard,
-  Megaphone,
-  GitFork,
-  Users,
-  ChevronLeft,
-  ChevronRight,
-  HelpCircle,
-  Code2,
-  UserPlus, // NAYA: Team page icon ke liye
-  LogOut    // NAYA: Logout icon ke liye
-} from "lucide-react";
-import ConfigModal from "./ConfigModal";
+import React, { useState, useEffect } from "react";
+import { Users, UserPlus, Trash2, Loader2, Mail, Lock, User, ShieldCheck, Activity, Key, Layout } from "lucide-react";
+import Sidebar from "@/components/Sidebar";
 
-export default function Sidebar() {
-  const [user, setUser] = useState<any>(null);
-  const [isMatched, setIsMatched] = useState<boolean>(false);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
-  const [collapsed, setCollapsed] = useState<boolean>(false);
-  const [hideOnMobile, setHideOnMobile] = useState<boolean>(false);
+// System ke saare pages jo access ke liye available hain
+const AVAILABLE_PAGES = [
+  { id: "/dashboard", name: "Main Dashboard" },
+  { id: "/chat", name: "Live Chat" },
+  { id: "/contacts", name: "Contacts CRM" },
+  { id: "/campaigns", name: "Bulk Campaigns" },
+  { id: "/chatbot-builder", name: "Flow Builder" },
+  { id: "/template", name: "Templates" },
+  { id: "/settings", name: "Settings" }
+];
 
-  // ─── NAYA: Roles aur Agent details manage karne ke liye ───
-  const [userRole, setUserRole] = useState<"ADMIN" | "AGENT" | null>(null);
-  const [agentName, setAgentName] = useState<string>("");
+export default function TeamPage() {
+  const [team, setTeam] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  
+  // Modal states
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Naya Agent/Admin Form Data
+  const [formData, setFormData] = useState({ 
+    name: "", 
+    email: "", 
+    password: "",
+    role: "AGENT", 
+    allowedPages: ["/chat", "/contacts"], // Default Access
+    primaryPage: "/chat" // Default Login Page
+  });
 
-  const pathname = usePathname();
-  const router = useRouter(); // Router initialize kiya
+  // REAL DATA FETCHING - No Dummy Data
+  const fetchTeam = async () => {
+    try {
+      const res = await fetch("/api/team");
+      if (res.ok) {
+        const data = await res.json();
+        setTeam(data);
+      }
+    } catch (error) {
+      console.error("Error fetching team", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  // Firebase Auth, Config Load & Agent LocalStorage Check
   useEffect(() => {
-    // 1. Pehle check karo ki kya koi AGENT logged in hai?
-    if (typeof window !== "undefined") {
-      const agentToken = localStorage.getItem("agent_token");
-      const savedAgentName = localStorage.getItem("agent_name");
+    fetchTeam();
+    // Live tracking ke liye har 10 second mein real-time data fetch karega
+    const interval = setInterval(fetchTeam, 10000); 
+    return () => clearInterval(interval);
+  }, []);
+
+  // Checkbox (Page Access) Handle Karne Ka Logic
+  const handleCheckboxChange = (pageId: string) => {
+    setFormData(prev => {
+      const newAllowed = prev.allowedPages.includes(pageId)
+        ? prev.allowedPages.filter(p => p !== pageId) // Remove
+        : [...prev.allowedPages, pageId]; // Add
       
-      if (agentToken) {
-        setUserRole("AGENT");
-        setAgentName(savedAgentName || "Support Agent");
-        setUser({ uid: agentToken }); // Dummy user banaya taaki aage ke error na aaye
-        setIsMatched(true); // Agent ko API config hamesha true manenge
-        setLoading(false);
-        return;
-      }
-    }
-
-    // 2. Agar Agent nahi hai, toh check karo kya ADMIN (Firebase) logged in hai?
-    const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
-      if (currentUser) {
-        setUserRole("ADMIN");
-        setUser(currentUser);
-        const userRef = ref(database, `users/${currentUser.uid}/config`);
-        const unsubscribeDB = onValue(userRef, (snapshot) => {
-          setIsMatched(snapshot.exists() && snapshot.val().isMatched);
-          setLoading(false);
-        });
-        return () => unsubscribeDB();
-      } else {
-        setUserRole(null);
-        setUser(null);
-        setLoading(false);
-      }
+      // Agar user ne Primary Page wala checkbox hata diya, toh naya Primary Page set karo
+      const newPrimary = newAllowed.includes(prev.primaryPage) ? prev.primaryPage : (newAllowed[0] || "");
+      
+      return { ...prev, allowedPages: newAllowed, primaryPage: newPrimary };
     });
-    return () => unsubscribeAuth();
-  }, []);
+  };
 
-  // ─── NAYA LOGIC: Route Guard & Default Redirect ───
-  useEffect(() => {
-    // Jab loading khatam ho jaye tab check karo
-    if (!loading) {
-      if (!userRole) {
-        // 1. Bina login wale ko dhakka maar ke login page pe bhejo
-        router.push("/login");
-      } else if (pathname === "/") {
-        // 2. Agar logged in hai aur default URL (/) khola hai, toh Role ke hisab se bhejo
-        router.push(userRole === "AGENT" ? "/chat" : "/dashboard");
-      }
-    }
-  }, [loading, userRole, pathname, router]);
-
-  // Smart detector for mobile hide logic
-  useEffect(() => {
-    const checkIfDetailViewOpen = () => {
-      const isDetailView =
-        document.getElementById("hide-bottom-bar") ||
-        document.getElementById("mobile-chat-view") ||
-        document.getElementById("template-builder-view") ||
-        document.getElementById("flow-builder-view");
-      setHideOnMobile(!!isDetailView);
-    };
-    checkIfDetailViewOpen();
-    const observer = new MutationObserver(checkIfDetailViewOpen);
-    observer.observe(document.body, { childList: true, subtree: true });
-    return () => observer.disconnect();
-  }, []);
-
-  // ─── NAYA: Logout Handler (Admin aur Agent dono ke liye) ───
-  const handleLogout = async () => {
-    if (confirm("Are you sure you want to log out?")) {
-      if (userRole === "AGENT") {
-        localStorage.removeItem("agent_token");
-        localStorage.removeItem("agent_name");
-        router.push("/login");
+  // Naya User Database mein Save Karna
+  const handleAddMember = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if(formData.allowedPages.length === 0) return alert("Please select at least one page access!");
+    
+    setIsSubmitting(true);
+    try {
+      const res = await fetch("/api/team", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData)
+      });
+      
+      if (res.ok) {
+        // Form Reset
+        setFormData({ name: "", email: "", password: "", role: "AGENT", allowedPages: ["/chat", "/contacts"], primaryPage: "/chat" });
+        setIsModalOpen(false);
+        fetchTeam(); // List Refresh
       } else {
-        await auth.signOut();
-        router.push("/login");
+        const data = await res.json();
+        alert(data.error || "Failed to add member");
+      }
+    } catch (error) {
+      alert("Something went wrong!");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // User Delete Karna
+  const handleDelete = async (id: string, name: string) => {
+    if (confirm(`Are you sure you want to permanently remove ${name}?`)) {
+      try {
+        const res = await fetch("/api/team", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id })
+        });
+        if (res.ok) fetchTeam();
+      } catch (error) {
+        console.error("Delete error", error);
       }
     }
   };
 
-  const isActive = (paths: string[]) =>
-    paths.some((p) => pathname === p || pathname?.startsWith(p + "/"));
-
-  // ─── NAYA: Roles define kiye gaye hain har page ke liye ───
-  const rawNavItems = [
-    { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard", activePaths: ["/dashboard"], roles: ["ADMIN"] },
-    { href: "/campaigns", icon: Megaphone, label: "Campaigns", activePaths: ["/campaigns"], roles: ["ADMIN"] },
-    { href: "/chat", icon: MessageSquare, label: "Chat", activePaths: ["/chat"], roles: ["ADMIN", "AGENT"] },
-    { href: "/chatbot-builder", icon: GitFork, label: "Flows", activePaths: ["/chatbot-builder"], roles: ["ADMIN"] },
-    { href: "/template", icon: LayoutTemplate, label: "Templates", activePaths: ["/template"], roles: ["ADMIN"] },
-    { href: "/contacts", icon: Users, label: "Contacts", activePaths: ["/contacts"], roles: ["ADMIN", "AGENT"] },
-    { href: "/dashboard/team", icon: UserPlus, label: "Team", activePaths: ["/dashboard/team"], roles: ["ADMIN"] }, // Added Team Page
-  ];
-
-  const rawBottomItems = [
-    { href: "/settings", icon: Settings, label: "Settings", activePaths: ["/settings"], roles: ["ADMIN"] },
-    { href: "/developers", icon: Code2, label: "Developers", activePaths: ["/developers"], roles: ["ADMIN"] },
-    { href: "/help", icon: HelpCircle, label: "Help Center", activePaths: ["/help"], roles: ["ADMIN", "AGENT"] },
-  ];
-
-  // Sirf wahi options filter karke nikalenge jiska Access Current Role ko hai
-  const navItems = rawNavItems.filter(item => item.roles.includes(userRole || ""));
-  const bottomItems = rawBottomItems.filter(item => item.roles.includes(userRole || ""));
-
-  if (loading) {
-    return (
-      <>
-        {/* Desktop skeleton */}
-        <div className="hidden md:flex flex-col h-full w-[220px] bg-white border-r border-gray-100 items-center justify-center">
-          <Loader2 className="w-5 h-5 animate-spin text-[#25D366]" />
-        </div>
-        {/* Mobile skeleton */}
-        <div className="md:hidden fixed bottom-0 left-0 z-30 w-full h-16 border-t border-gray-100 bg-white flex items-center justify-center">
-          <Loader2 className="w-5 h-5 animate-spin text-[#25D366]" />
-        </div>
-      </>
-    );
-  }
-
-  // Agar user null hai aur redirect ho raha hai, toh null return kardo taaki UI flash na ho
-  if (!userRole) return null; 
-
   return (
-    <>
-      {/* ================================================ */}
-      {/* DESKTOP SIDEBAR — Collapsible                    */}
-      {/* ================================================ */}
-      <aside
-        className={`hidden md:flex flex-col h-full bg-white border-r border-gray-100 z-40 shrink-0 transition-all duration-300 ease-in-out ${
-          collapsed ? "w-[64px]" : "w-[220px]"
-        }`}
-      >
-        {/* Logo / Brand */}
-        <div
-          className={`flex items-center h-14 border-b border-gray-100 px-3 shrink-0 ${
-            collapsed ? "justify-center" : "justify-between"
-          }`}
-        >
-          {!collapsed && (
-            <div className="flex items-center gap-2 overflow-hidden">
-              <div className="w-7 h-7 bg-[#25D366] rounded-lg flex items-center justify-center shrink-0">
-                <MessageSquare className="w-4 h-4 text-white" />
-              </div>
-              <span className="font-bold text-[15px] text-gray-900 tracking-tight whitespace-nowrap">
-                BaseKey
-              </span>
-            </div>
-          )}
-          {collapsed && (
-            <div className="w-7 h-7 bg-[#25D366] rounded-lg flex items-center justify-center">
-              <MessageSquare className="w-4 h-4 text-white" />
-            </div>
-          )}
-          <button
-            onClick={() => setCollapsed(!collapsed)}
-            className={`w-6 h-6 rounded-full bg-gray-100 hover:bg-gray-200 border border-gray-200 flex items-center justify-center text-gray-500 transition-colors shrink-0 ${
-              collapsed ? "mt-0 ml-0" : ""
-            }`}
-            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+    <div className="flex h-[100dvh] w-full bg-[#F5F7F9] font-sans text-gray-900">
+      <div className="shrink-0 z-50">
+        <Sidebar />
+      </div>
+
+      <div className="flex-1 flex flex-col h-full overflow-y-auto relative">
+        {/* Header */}
+        <div className="bg-white border-b border-gray-200 px-6 py-5 flex justify-between items-center sticky top-0 z-10">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+              <ShieldCheck className="w-6 h-6 text-[#00A884]" /> Access & Team Management
+            </h1>
+            <p className="text-sm text-gray-500 mt-1">Manage administrators, support agents, and track their live activity.</p>
+          </div>
+          <button 
+            onClick={() => setIsModalOpen(true)}
+            className="bg-[#00A884] hover:bg-[#009172] text-white px-5 py-2.5 rounded-lg font-bold flex items-center gap-2 shadow-sm transition"
           >
-            {collapsed ? (
-              <ChevronRight className="w-3.5 h-3.5" />
-            ) : (
-              <ChevronLeft className="w-3.5 h-3.5" />
-            )}
+            <UserPlus className="w-5 h-5" /> Create Access
           </button>
         </div>
 
-        {/* Main nav */}
-        <div className="flex-1 flex flex-col py-3 overflow-y-auto no-scrollbar gap-0.5 px-2">
-          {isMatched ? (
-            <>
-              {navItems.map((item) => {
-                const active = isActive(item.activePaths);
-                return (
-                  <Link key={item.href} href={item.href}>
-                    <div
-                      className={`group flex items-center gap-3 rounded-lg px-2.5 py-2.5 cursor-pointer transition-all duration-150 relative ${
-                        active
-                          ? "bg-[#e8faf0] text-[#25D366]"
-                          : "text-gray-500 hover:bg-gray-50 hover:text-gray-800"
-                      } ${collapsed ? "justify-center px-0" : ""}`}
-                      title={collapsed ? item.label : undefined}
-                    >
-                      {active && !collapsed && (
-                        <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-[#25D366] rounded-r-full" />
-                      )}
-                      <item.icon
-                        className={`shrink-0 transition-none ${
-                          active ? "text-[#25D366]" : "text-gray-400 group-hover:text-gray-600"
-                        } ${collapsed ? "w-5 h-5" : "w-4 h-4"}`}
-                      />
-                      {!collapsed && (
-                        <span
-                          className={`text-[13.5px] font-medium whitespace-nowrap ${
-                            active ? "text-[#25D366]" : "text-gray-600 group-hover:text-gray-800"
-                          }`}
-                        >
-                          {item.label}
-                        </span>
-                      )}
-                      {collapsed && (
-                        <div className="absolute left-[52px] px-2.5 py-1.5 bg-gray-900 text-white text-xs font-medium rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50 shadow-lg">
-                          {item.label}
-                          <div className="absolute right-full top-1/2 -translate-y-1/2 border-4 border-transparent border-r-gray-900" />
+        {/* Main Content Area */}
+        <div className="p-6 max-w-6xl mx-auto w-full">
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+            {loading ? (
+              <div className="p-10 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-[#00A884]" /></div>
+            ) : team.length === 0 ? (
+              <div className="p-10 text-center text-gray-500 border-dashed border-2 border-gray-200 m-6 rounded-xl font-medium">
+                No team members found. Click "Create Access" to add an Administrator or Agent.
+              </div>
+            ) : (
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200 text-xs uppercase text-gray-500 font-bold tracking-wider">
+                    <th className="px-6 py-4">User Details</th>
+                    <th className="px-6 py-4">Role & Access Permissions</th>
+                    <th className="px-6 py-4">Live Activity Tracking</th>
+                    <th className="px-6 py-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {team.map((member) => (
+                    <tr key={member.id} className="hover:bg-gray-50/50 transition">
+                      <td className="px-6 py-4">
+                        <div className="font-bold text-gray-900 text-[15px]">{member.name}</div>
+                        <div className="text-xs text-gray-500 flex items-center gap-1 mt-1">
+                          <Mail className="w-3 h-3" /> {member.email}
                         </div>
-                      )}
-                    </div>
-                  </Link>
-                );
-              })}
-            </>
-          ) : (
-            <div
-              className={`flex flex-col items-center gap-2 mt-6 px-2 ${
-                collapsed ? "" : ""
-              }`}
-            >
-              <div className="w-9 h-9 bg-red-50 text-red-400 rounded-xl flex items-center justify-center border border-red-100">
-                <AlertCircle className="w-4.5 h-4.5" />
-              </div>
-              {!collapsed && (
-                <p className="text-[11px] text-gray-400 text-center leading-tight font-medium">
-                  API Not Linked
-                </p>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Bottom section */}
-        <div className={`flex flex-col pb-4 pt-2 border-t border-gray-100 gap-0.5 px-2`}>
-          {bottomItems.map((item) => {
-            const active = isActive(item.activePaths);
-            return (
-              <Link key={item.href} href={item.href}>
-                <div
-                  className={`group flex items-center gap-3 rounded-lg px-2.5 py-2 cursor-pointer transition-all duration-150 ${
-                    active ? "text-[#25D366] bg-[#e8faf0]" : "text-gray-400 hover:bg-gray-50 hover:text-gray-600"
-                  } ${collapsed ? "justify-center px-0" : ""}`}
-                  title={collapsed ? item.label : undefined}
-                >
-                  <item.icon className={`shrink-0 ${collapsed ? "w-5 h-5" : "w-4 h-4"} ${active ? "text-[#25D366]" : ""}`} />
-                  {!collapsed && (
-                    <span className="text-[13px] font-medium whitespace-nowrap">{item.label}</span>
-                  )}
-                  {collapsed && (
-                    <div className="absolute left-[52px] px-2.5 py-1.5 bg-gray-900 text-white text-xs font-medium rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50 shadow-lg">
-                      {item.label}
-                    </div>
-                  )}
-                </div>
-              </Link>
-            );
-          })}
-
-          {/* Config Button - SIRF ADMIN KO DIKHEGA */}
-          {userRole === "ADMIN" && (
-            <div
-              className={`flex items-center gap-3 rounded-lg px-2.5 py-2 cursor-pointer transition-all duration-150 text-gray-400 hover:bg-gray-50 hover:text-gray-600 ${
-                collapsed ? "justify-center px-0" : ""
-              }`}
-              onClick={() => setIsModalOpen(true)}
-              title={collapsed ? (isMatched ? "Configuration" : "Connect API") : undefined}
-            >
-              <Link2 className={`shrink-0 text-gray-700 ${collapsed ? "w-5 h-5" : "w-4 h-4"}`} />
-              {!collapsed && (
-                <span className="text-[13px] font-medium text-gray-600">
-                  {isMatched ? "Configuration" : "Connect API"}
-                </span>
-              )}
-            </div>
-          )}
-
-          {/* ─── NAYA: User Profile & Logout (Agent/Admin Dono ke liye) ─── */}
-          <div
-            onClick={handleLogout}
-            className={`group flex items-center gap-2.5 mt-1 px-2 py-1.5 rounded-lg hover:bg-red-50 cursor-pointer transition-colors ${
-              collapsed ? "justify-center px-0" : ""
-            }`}
-            title={collapsed ? "Logout" : undefined}
-          >
-            <div className="w-8 h-8 rounded-full bg-[#e8faf0] group-hover:bg-red-100 border border-[#b7e8cc] group-hover:border-red-200 flex items-center justify-center text-sm font-bold text-[#1a9e4e] group-hover:text-red-500 shrink-0 overflow-hidden transition-colors">
-              {userRole === "ADMIN" && user?.photoURL ? (
-                <img src={user.photoURL} alt="User" className="w-full h-full object-cover" />
-              ) : (
-                (userRole === "AGENT" ? agentName : user?.email)?.charAt(0).toUpperCase() || "U"
-              )}
-            </div>
-            {!collapsed && (
-              <div className="flex flex-col overflow-hidden">
-                <span className="text-[12px] font-semibold text-gray-800 group-hover:text-red-600 truncate leading-tight transition-colors">
-                  {userRole === "ADMIN" ? (user?.displayName || user?.email?.split("@")[0] || "Owner") : agentName}
-                </span>
-                <span className="text-[10px] text-gray-400 group-hover:text-red-400 truncate leading-tight transition-colors">
-                  {userRole === "ADMIN" ? (user?.email || "Admin") : "Support Agent"}
-                </span>
-              </div>
-            )}
-            {!collapsed && isMatched && (
-              <>
-                {/* Default dikhega CheckCircle, Hover par dikhega Logout */}
-                <CheckCircle2 className="w-3.5 h-3.5 text-[#25D366] ml-auto shrink-0 group-hover:hidden" />
-                <LogOut className="w-3.5 h-3.5 text-red-500 ml-auto shrink-0 hidden group-hover:block" />
-              </>
-            )}
-            {!collapsed && !isMatched && (
-              <LogOut className="w-3.5 h-3.5 text-red-500 ml-auto shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={`text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide ${member.role === 'ADMIN' ? 'bg-purple-100 text-purple-700 border border-purple-200' : 'bg-[#e8faf0] text-[#00A884] border border-[#b7e8cc]'}`}>
+                          {member.role === 'ADMIN' ? 'Administrator' : 'Support Agent'}
+                        </span>
+                        <div className="text-[11px] text-gray-500 mt-2 flex gap-1.5 flex-wrap">
+                          {/* Yahan real database ke allowed pages show honge */}
+                          {member.allowedPages?.slice(0, 3).map((page: string) => (
+                            <span key={page} className="bg-gray-100 border border-gray-200 px-1.5 py-0.5 rounded text-[10px] font-medium">
+                              {AVAILABLE_PAGES.find(p => p.id === page)?.name || page}
+                            </span>
+                          ))}
+                          {member.allowedPages?.length > 3 && (
+                            <span className="bg-gray-100 border border-gray-200 px-1.5 py-0.5 rounded text-[10px] font-bold">
+                              +{member.allowedPages.length - 3} more
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex flex-col gap-1.5">
+                          <span className={`text-xs font-bold flex items-center gap-1.5 w-max ${member.status === 'ONLINE' ? 'text-green-600' : member.status === 'BUSY' ? 'text-orange-500' : 'text-gray-400'}`}>
+                            <div className={`w-2 h-2 rounded-full ${member.status === 'ONLINE' ? 'bg-green-500 animate-pulse' : member.status === 'BUSY' ? 'bg-orange-500' : 'bg-gray-300'}`}></div>
+                            {member.status || "OFFLINE"}
+                          </span>
+                          <span className="text-[11px] text-gray-500 flex items-center gap-1 font-medium bg-gray-50 px-2 py-1 rounded-md border border-gray-100 w-max">
+                            <Activity className="w-3.5 h-3.5 text-gray-400" /> {member.currentActivity || "Idle / Offline"}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <button onClick={() => handleDelete(member.id, member.name)} className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition" title="Delete User">
+                          <Trash2 className="w-5 h-5" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             )}
           </div>
         </div>
-      </aside>
+      </div>
 
-      {/* ================================================ */}
-      {/* MOBILE BOTTOM BAR                                */}
-      {/* ================================================ */}
-      <nav
-        className={`md:hidden fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-gray-100 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] transition-all duration-300 ease-in-out ${
-          hideOnMobile
-            ? "translate-y-full opacity-0 pointer-events-none"
-            : "translate-y-0 opacity-100"
-        }`}
-      >
-        <div className="flex items-center h-16 px-2 overflow-x-auto gap-2 w-full [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
-          {isMatched ? (
-            <>
-              {navItems.map((item) => {
-                const active = isActive(item.activePaths);
-                return (
-                  <Link key={item.href} href={item.href} className="flex-1 min-w-[70px] shrink-0">
-                    <div className="flex flex-col items-center justify-center gap-0.5 py-1.5">
-                      <div
-                        className={`relative w-9 h-9 rounded-xl flex items-center justify-center transition-all ${
-                          active
-                            ? "bg-[#e8faf0] text-[#25D366]"
-                            : "text-gray-400"
-                        }`}
-                      >
-                        <item.icon className="w-[18px] h-[18px]" />
-                        {active && (
-                          <div className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white" />
-                        )}
-                      </div>
-                      <span
-                        className={`text-[9.5px] font-medium ${
-                          active ? "text-[#25D366]" : "text-gray-400"
-                        }`}
-                      >
-                        {item.label}
-                      </span>
-                    </div>
-                  </Link>
-                );
-              })}
-
-              {/* ─── NAYA: Mobile par Settings aur Config sirf ADMIN ko dikhenge ─── */}
-              {userRole === "ADMIN" && (
-                <>
-                  <Link href="/settings" className="flex-1 min-w-[70px] shrink-0">
-                    <div className="flex flex-col items-center justify-center gap-0.5 py-1.5">
-                      <div className={`relative w-9 h-9 rounded-xl flex items-center justify-center transition-all ${
-                        pathname === "/settings" || pathname?.startsWith("/settings/") ? "bg-[#e8faf0] text-[#25D366]" : "text-gray-400"
-                      }`}>
-                        <Settings className="w-[18px] h-[18px]" />
-                      </div>
-                      <span className={`text-[9.5px] font-medium ${
-                        pathname === "/settings" || pathname?.startsWith("/settings/") ? "text-[#25D366]" : "text-gray-400"
-                      }`}>Settings</span>
-                    </div>
-                  </Link>
-
-                  <button
-                    onClick={() => setIsModalOpen(true)}
-                    className="flex-1 min-w-[70px] shrink-0 flex flex-col items-center justify-center gap-0.5 py-1.5"
-                  >
-                    <div className="w-9 h-9 rounded-xl flex items-center justify-center text-gray-400">
-                      <Link2 className="w-[18px] h-[18px]" />
-                    </div>
-                    <span className="text-[9.5px] font-medium text-gray-400">Config</span>
-                  </button>
-                </>
-              )}
-            </>
-          ) : (
-            <div className="flex items-center justify-center w-full gap-3 py-2 min-w-full">
-              <div className="w-8 h-8 bg-red-50 text-red-400 rounded-lg flex items-center justify-center border border-red-100">
-                <AlertCircle className="w-4 h-4" />
-              </div>
-              <p className="text-sm text-gray-500 font-medium">API Not Connected</p>
-              
-              {/* Connect Button sirf Admin ko mobile par dikhega */}
-              {userRole === "ADMIN" && (
-                <button
-                  onClick={() => setIsModalOpen(true)}
-                  className="px-4 py-2 bg-gray-900 text-white text-xs font-bold rounded-xl hover:bg-gray-800 transition"
-                >
-                  Connect
-                </button>
-              )}
+      {/* CREATE ACCESS MODAL */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50 shrink-0">
+              <h3 className="font-bold text-lg flex items-center gap-2">
+                <Key className="w-5 h-5 text-[#00A884]" /> System Access Configuration
+              </h3>
+              <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-700 font-bold text-2xl">&times;</button>
             </div>
-          )}
-        </div>
-        <div className="h-[env(safe-area-inset-bottom)] bg-white" />
-      </nav>
+            
+            <form onSubmit={handleAddMember} className="p-6 overflow-y-auto space-y-6">
+              
+              {/* Row 1: Basic Info */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Full Name</label>
+                  <div className="flex items-center gap-3 bg-gray-50 p-2.5 rounded-xl border border-gray-200 focus-within:border-[#00A884]">
+                    <User className="w-4 h-4 text-gray-400 ml-1" />
+                    <input type="text" required placeholder="e.g. Rahul Kumar" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} className="bg-transparent flex-1 outline-none text-sm" />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Email Address (Login ID)</label>
+                  <div className="flex items-center gap-3 bg-gray-50 p-2.5 rounded-xl border border-gray-200 focus-within:border-[#00A884]">
+                    <Mail className="w-4 h-4 text-gray-400 ml-1" />
+                    <input type="email" required placeholder="name@company.com" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} className="bg-transparent flex-1 outline-none text-sm" />
+                  </div>
+                </div>
+              </div>
 
-      {/* Config Modal sirf Admin ke liye render hoga */}
-      {userRole === "ADMIN" && (
-        <ConfigModal
-          isOpen={isModalOpen}
-          onClose={() => setIsModalOpen(false)}
-          onSuccess={() => setIsModalOpen(false)}
-        />
+              {/* Row 2: Role & Password */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Assign User Role</label>
+                  <select 
+                    value={formData.role} 
+                    onChange={(e) => {
+                      const newRole = e.target.value;
+                      setFormData({
+                        ...formData, 
+                        role: newRole,
+                        // Agar Admin select kiya, toh apne aap saare pages select ho jayenge
+                        allowedPages: newRole === 'ADMIN' ? AVAILABLE_PAGES.map(p => p.id) : ["/chat", "/contacts"]
+                      });
+                    }}
+                    className="w-full bg-gray-50 p-2.5 rounded-xl border border-gray-200 focus:border-[#00A884] outline-none text-sm font-bold text-gray-700"
+                  >
+                    <option value="AGENT">Support Agent (Custom Access)</option>
+                    <option value="ADMIN">Administrator (Full Owner Rights)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Initial Password</label>
+                  <div className="flex items-center gap-3 bg-gray-50 p-2.5 rounded-xl border border-gray-200 focus-within:border-[#00A884]">
+                    <Lock className="w-4 h-4 text-gray-400 ml-1" />
+                    <input type="text" required placeholder="Set user password" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} className="bg-transparent flex-1 outline-none text-sm" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Row 3: Advanced Page Permissions (Checkboxes) */}
+              <div className="border-t border-gray-100 pt-5">
+                <label className="text-xs font-bold text-gray-500 uppercase block mb-3">Allowed Workspace Modules</label>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  {AVAILABLE_PAGES.map((page) => (
+                    <label key={page.id} className={`flex items-center gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${formData.allowedPages.includes(page.id) ? 'bg-[#e8faf0] border-[#00A884] text-[#00A884] shadow-sm' : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'}`}>
+                      <input 
+                        type="checkbox" 
+                        className="accent-[#00A884] w-4 h-4 cursor-pointer" 
+                        checked={formData.allowedPages.includes(page.id)}
+                        onChange={() => handleCheckboxChange(page.id)}
+                      />
+                      <span className="text-[13px] font-bold">{page.name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Row 4: Primary Routing Page */}
+              <div className="border-t border-gray-100 pt-5 bg-blue-50/50 -mx-6 px-6 pb-2 rounded-b-2xl">
+                <label className="text-xs font-bold text-blue-700 uppercase block mb-2 flex items-center gap-2 pt-4">
+                  <Layout className="w-4 h-4" /> Primary Landing Page
+                </label>
+                <select 
+                  value={formData.primaryPage} 
+                  onChange={(e) => setFormData({...formData, primaryPage: e.target.value})}
+                  className="w-full bg-white p-2.5 rounded-xl border border-blue-200 focus:border-blue-500 outline-none text-sm font-bold text-gray-800 shadow-sm"
+                  disabled={formData.allowedPages.length === 0}
+                >
+                  {/* Dropdown mein sirf wahi options aayenge jo upar Checkbox mein tick hain */}
+                  {formData.allowedPages.map(pageId => (
+                    <option key={pageId} value={pageId}>
+                      {AVAILABLE_PAGES.find(p => p.id === pageId)?.name || pageId}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[11.5px] text-gray-500 mt-2 font-medium">
+                  After successful login, the user will be automatically redirected to this specific page.
+                </p>
+              </div>
+
+              {/* Submit Buttons */}
+              <div className="pt-2 flex gap-3">
+                <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 rounded-xl font-bold transition">Cancel</button>
+                <button type="submit" disabled={isSubmitting} className="flex-[2] bg-[#00A884] hover:bg-[#009172] text-white py-3 rounded-xl font-bold transition flex justify-center items-center gap-2 disabled:opacity-50 shadow-md">
+                  {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : "Save User & Grant Access"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
-    </>
+    </div>
   );
 }
