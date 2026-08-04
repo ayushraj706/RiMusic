@@ -3,12 +3,16 @@ import GoogleProvider from "next-auth/providers/google";
 import GithubProvider from "next-auth/providers/github";
 import FacebookProvider from "next-auth/providers/facebook";
 import TwitterProvider from "next-auth/providers/twitter";
+import { PrismaAdapter } from "@auth/prisma-adapter";
 import { PrismaClient } from "@prisma/client";
 
-// Database connect karne ke liye
+// Database connect karne ke liye single instance
 const prisma = new PrismaClient();
 
 const handler = NextAuth({
+  // 🔥 sabse zaroori: NextAuth ka official Prisma Adapter taaki Account, Session tables automatic sync rahein
+  adapter: PrismaAdapter(prisma),
+  
   providers: [
     // 1. Google Setup
     GoogleProvider({
@@ -32,28 +36,29 @@ const handler = NextAuth({
     TwitterProvider({
       clientId: process.env.TWITTER_CLIENT_ID as string,
       clientSecret: process.env.TWITTER_CLIENT_SECRET as string,
-      version: "2.0", // Twitter OAuth 2.0 version use karta hai
+      version: "2.0",
     }),
   ],
   
   callbacks: {
-    // Jab user kisi bhi social button par click karke login karega
+    // Jab user login karega tab yeh check karega
     async signIn({ user, account, profile }) {
-      if (!user.email) return false;
+      if (!user.email) return true;
 
-      // Check karo ki kya yeh user hamare Prisma database mein pehle se hai?
+      // Check karo kya user pehle se database mein hai?
       const existingUser = await prisma.user.findUnique({
         where: { email: user.email },
       });
 
-      // Agar user naya hai, toh usko Database mein SAVE kar lo as an ADMIN
       if (!existingUser) {
+        // Agar naya user hai toh usko ADMIN bana kar insert kar do
         await prisma.user.create({
           data: {
-            name: user.name || "Unknown",
+            name: user.name || "Business Owner",
             email: user.email,
-            passwordHash: "SOCIAL_LOGIN", // Social login mein password nahi hota
-            role: "ADMIN", // Business Owner tab se login ho raha hai, isliye ADMIN
+            image: user.image,
+            passwordHash: "SOCIAL_LOGIN",
+            role: "ADMIN",
             allowedPages: [
               "/dashboard", 
               "/chat", 
@@ -68,15 +73,24 @@ const handler = NextAuth({
             currentActivity: "Logged in via " + account?.provider,
           },
         });
+      } else {
+        // Agar purana user hai toh uska status update kar do
+        await prisma.user.update({
+          where: { email: user.email },
+          data: {
+            status: "ONLINE",
+            currentActivity: "Active via " + account?.provider,
+          },
+        });
       }
       return true;
     },
     
-    // Token mein user ka data set karna
+    // Token mein user ID aur role inject karna
     async jwt({ token, user }) {
-      if (user?.email) {
+      if (token.email) {
         const dbUser = await prisma.user.findUnique({
-          where: { email: user.email },
+          where: { email: token.email },
         });
         if (dbUser) {
           token.id = dbUser.id;
@@ -87,7 +101,7 @@ const handler = NextAuth({
       return token;
     },
     
-    // Session mein data bhejta hai taaki frontend par access kar sakein
+    // Session mein data frontend ke liye bhejna
     async session({ session, token }: any) {
       if (session.user) {
         session.user.id = token.id;
@@ -99,16 +113,15 @@ const handler = NextAuth({
   },
   
   pages: {
-    signIn: '/login', // Custom login page ka rasta
-    error: '/login',  // Error aaye toh wapas login par bhej do
+    signIn: '/login', 
+    error: '/login',  
   },
   
   session: {
-    strategy: "jwt", // Token based secure session
+    strategy: "jwt", 
   },
   
   secret: process.env.NEXTAUTH_SECRET,
 });
 
-// Next.js App Router ke liye GET aur POST export karna zaroori hai
 export { handler as GET, handler as POST };
