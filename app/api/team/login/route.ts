@@ -11,28 +11,34 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Email and Password are required" }, { status: 400 });
     }
 
-    // Database mein check karo ki is email ka agent hai ya nahi
-    const agent = await prisma.user.findUnique({
+    // Database mein check karo ki is email ka user (Admin ya Agent) hai ya nahi
+    const user = await prisma.user.findUnique({
       where: { email: email.trim().toLowerCase() }
     });
 
-    if (!agent) {
-      return NextResponse.json({ error: "No agent found with this email" }, { status: 404 });
+    if (!user) {
+      return NextResponse.json({ error: "No user found with this email" }, { status: 404 });
     }
 
     // Password check karo (Abhi direct match kar rahe hain)
-    if (agent.passwordHash !== password) {
+    if (user.passwordHash !== password) {
       return NextResponse.json({ error: "Incorrect password" }, { status: 401 });
     }
 
-    // Agar sab sahi hai, toh Agent ka data bhej do
+    // 🔥 NAYA: Agar sab sahi hai, toh User ka data (primaryPage aur allowedPages ke sath) bhej do
     return NextResponse.json({ 
       success: true, 
-      agent: { id: agent.id, name: agent.name, role: agent.role } 
+      agent: { 
+        id: user.id, 
+        name: user.name, 
+        role: user.role,
+        primaryPage: user.primaryPage || "/chat",
+        allowedPages: user.allowedPages || [] 
+      } 
     });
 
   } catch (error) {
-    console.error("Agent Login Error:", error);
+    console.error("Login API Error:", error);
     return NextResponse.json({ error: "Server Error" }, { status: 500 });
   }
 }
