@@ -197,6 +197,24 @@ model ApiKey {
   updatedAt   DateTime  @updatedAt
 }
 
+// 10. Campaigns Model (Asli data save karne ke liye)
+model Campaign {
+  id          String   @id @default(uuid())
+  name        String
+  template    String
+  status      String   @default("running") // completed, running, scheduled, draft
+  audience    Int      @default(0)
+  sent        Int      @default(0)
+  delivered   Int      @default(0)
+  read        Int      @default(0)
+  
+  authorId    String?  
+  author      User?    @relation(fields: [authorId], references: [id])
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
 // --- ENUMS FOR STRICT DATA TYPING ---
 
 enum UserRole {
