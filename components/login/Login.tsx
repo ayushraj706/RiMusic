@@ -1,14 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { signInWithPopup } from "firebase/auth";
-import { 
-  auth, 
-  googleProvider, 
-  facebookProvider, 
-  githubProvider, 
-  twitterProvider 
-} from "@/lib/firebase"; 
+import { signIn } from "next-auth/react"; // 🔥 NAYA: Firebase hata kar NextAuth lagaya
 import { 
   KeyRound, 
   Lock, 
@@ -28,41 +21,21 @@ export default function LoginComponent() {
     visible: { opacity: 1, y: 0 }
   };
 
-  // --- SOCIAL LOGIN FUNCTIONS (Firebase) ---
-  const handleGoogleLogin = async () => {
-    try { 
-      const res = await signInWithPopup(auth, googleProvider); 
-      if (res.user) window.location.href = "/dashboard"; 
-    } catch (error: any) { 
-      alert("Google Error: " + error.message); 
-    }
+  // --- SOCIAL LOGIN FUNCTIONS (NextAuth) ---
+  const handleGoogleLogin = () => {
+    signIn("google", { callbackUrl: "/dashboard" });
   };
 
-  const handleFacebookLogin = async () => {
-    try { 
-      const res = await signInWithPopup(auth, facebookProvider); 
-      if (res.user) window.location.href = "/dashboard"; 
-    } catch (error: any) { 
-      alert("Facebook Error: " + error.message); 
-    }
+  const handleFacebookLogin = () => {
+    signIn("facebook", { callbackUrl: "/dashboard" });
   };
 
-  const handleGithubLogin = async () => {
-    try { 
-      const res = await signInWithPopup(auth, githubProvider); 
-      if (res.user) window.location.href = "/dashboard"; 
-    } catch (error: any) { 
-      alert("GitHub Error: " + error.message); 
-    }
+  const handleGithubLogin = () => {
+    signIn("github", { callbackUrl: "/dashboard" });
   };
 
-  const handleTwitterLogin = async () => {
-    try { 
-      const res = await signInWithPopup(auth, twitterProvider); 
-      if (res.user) window.location.href = "/dashboard"; 
-    } catch (error: any) { 
-      alert("X Error: " + error.message); 
-    }
+  const handleTwitterLogin = () => {
+    signIn("twitter", { callbackUrl: "/dashboard" });
   };
 
   // --- AGENT LOGIN FUNCTION (Prisma DB) ---
@@ -262,7 +235,8 @@ export default function LoginComponent() {
         transition={{ delay: 0.6 }}
       >
         <KeyRound className="w-3.5 h-3.5 stroke-[1.5]" />
-        {loginMode === "ADMIN" ? "Protected by Firebase Authentication" : "Secured by BaseKey Infrastructure"}
+        {/* 🔥 NAYA: Firebase ka naam footer se bhi hata diya */}
+        {loginMode === "ADMIN" ? "Secured by BaseKey OAuth" : "Secured by BaseKey Infrastructure"}
       </motion.div>
     </motion.div>
   );
