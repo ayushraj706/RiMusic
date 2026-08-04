@@ -9,7 +9,6 @@ import {
   RotateCcw,
   ChevronDown,
   Cpu,
-  Wifi,
   CheckCircle,
   Loader2,
   Code2,
@@ -18,10 +17,8 @@ import {
   Check,
 } from "lucide-react";
 import { useChatbotStore } from "@/store/useChatbotStore";
-
-// 🚀 NAYA: Firebase Realtime Database imports
-import { auth, database } from "@/lib/firebase"; 
-import { ref, set } from "firebase/database";
+// 🔥 NAYA: Firebase imports poori tarah se hata diye gaye hain!
+import { useSession } from "next-auth/react"; 
 
 // Dynamic import with fixed path using @/ alias to avoid path issues
 const ChatbotCanvas = dynamic(
@@ -73,7 +70,7 @@ function JsonModal({
             </div>
             <div>
               <h2 className="text-sm font-bold text-gray-800">Flow JSON Export</h2>
-              <p className="text-[10px] text-gray-500 mt-0.5">Firebase-ready configuration</p>
+              <p className="text-[10px] text-gray-500 mt-0.5">Database-ready configuration</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -111,6 +108,8 @@ function JsonModal({
 // ─── Main UI Component (Light Theme & Dedicated Canvas) ──────────────────────
 
 export default function ChatbotBuilderPage() {
+  const { data: session } = useSession(); // User session check karne ke liye
+
   const exportFlowAsJSON = useChatbotStore((s) => s.exportFlowAsJSON);
   const resetFlow = useChatbotStore((s) => s.resetFlow);
   const nodes = useChatbotStore((s) => s.nodes);
@@ -120,41 +119,41 @@ export default function ChatbotBuilderPage() {
   const [showJson, setShowJson] = useState(false);
   const [jsonData, setJsonData] = useState<object | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [flowName, setFlowName] = useState("Main Chatbot Flow");
 
-  // 🚀 NAYA BADAAL: Asli Firebase Realtime Database Saving Logic
+  // 🚀 NAYA BADAAL: Neon PostgreSQL Database Saving Logic (API Route ke zariye)
   const handleSave = useCallback(async () => {
     setSaveStatus("saving");
     
     try {
-      const json = exportFlowAsJSON();
-      const currentUser = auth.currentUser; // Current logged-in user check karega
-      
-      if (currentUser) {
-        // Agar user login hai, toh uske UID ke andar data save hoga
-        const dbRef = ref(database, `users/${currentUser.uid}/chatFlows/main_flow`);
-        await set(dbRef, {
-          flowData: json,
-          updatedAt: new Date().toISOString()
-        });
-        console.log("✅ Flow successfully saved to Firebase RTDB!");
-      } else {
-        // Test karne ke liye (agar login nahi hai)
-        console.warn("⚠️ No user logged in. Saving to public test path...");
-        const dbRef = ref(database, `public_test_flows/main_flow`);
-        await set(dbRef, {
-          flowData: json,
-          updatedAt: new Date().toISOString()
-        });
+      const payload = {
+        name: flowName,
+        isActive: true,
+        nodes: nodes, // Store se seedha nodes bhej rahe hain
+        edges: edges, // Store se seedha edges bhej rahe hain
+      };
+
+      // API ko POST request bhejenge (Neon DB mein save karne ke liye)
+      const res = await fetch("/api/flows/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        throw new Error("Database mein save nahi ho paya!");
       }
 
+      console.log("✅ Flow successfully saved to Neon Database!");
       setSaveStatus("saved");
     } catch (error) {
-      console.error("❌ Firebase Save Error:", error);
+      console.error("❌ Save Error:", error);
+      alert("Failed to save flow. Check console for details.");
     } finally {
       // 2.5 second baad wapas normal state me le aayega
       setTimeout(() => setSaveStatus("idle"), 2500);
     }
-  }, [exportFlowAsJSON]);
+  }, [nodes, edges, flowName]);
 
   const handleExport = useCallback(() => {
     const json = exportFlowAsJSON();
@@ -206,8 +205,9 @@ export default function ChatbotBuilderPage() {
           {/* Editable Flow Name */}
           <div className="hidden md:flex items-center gap-2 group">
             <input
-              defaultValue="New Chatbot Flow"
-              className="bg-transparent text-sm font-bold text-gray-700 focus:outline-none focus:text-gray-900 border-b border-transparent focus:border-[#25D366] transition-all min-w-0 w-44 px-1 py-0.5"
+              value={flowName}
+              onChange={(e) => setFlowName(e.target.value)}
+              className="bg-transparent text-sm font-bold text-gray-700 focus:outline-none focus:text-gray-900 border-b border-transparent focus:border-[#25D366] transition-all min-w-0 w-48 px-1 py-0.5"
             />
             <ChevronDown className="w-3.5 h-3.5 text-gray-400 group-hover:text-gray-600 transition-colors" />
           </div>
@@ -258,7 +258,7 @@ export default function ChatbotBuilderPage() {
 
             <button
               onClick={handleSave}
-              disabled={saveStatus === "saving"}
+              disabled={saveStatus === "saving" || nodes.length === 0}
               className={`
                 flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold rounded-lg transition-all duration-300
                 ${
@@ -279,7 +279,7 @@ export default function ChatbotBuilderPage() {
               {saveStatus === "saving"
                 ? "Saving…"
                 : saveStatus === "saved"
-                ? "Saved!"
+                ? "Saved DB!"
                 : "Save Flow"}
             </button>
           </div>
@@ -288,7 +288,7 @@ export default function ChatbotBuilderPage() {
           <div className="flex md:hidden items-center gap-2">
             <button
               onClick={handleSave}
-              disabled={saveStatus === "saving"}
+              disabled={saveStatus === "saving" || nodes.length === 0}
               className="flex items-center justify-center w-8 h-8 bg-[#25D366] hover:bg-[#1DA851] text-white rounded-lg shadow-md transition-all disabled:opacity-60"
             >
               {saveStatus === "saving" ? (
@@ -352,7 +352,7 @@ export default function ChatbotBuilderPage() {
           <div className="flex items-center gap-2 opacity-80">
             <Cpu className="w-3.5 h-3.5 text-gray-400" />
             <span className="text-[11px] font-bold text-gray-500">
-              WhatsApp Business API · Interactive Messages Engine
+              WhatsApp Business API · BaseKey AI Engine
             </span>
           </div>
         </div>
@@ -361,7 +361,7 @@ export default function ChatbotBuilderPage() {
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#25D366] opacity-75"></span>
             <span className="relative inline-flex rounded-full h-2 w-2 bg-[#1DA851]"></span>
           </div>
-          <span className="text-[10px] font-bold tracking-wide text-gray-500 uppercase">Connected</span>
+          <span className="text-[10px] font-bold tracking-wide text-gray-500 uppercase">Neon DB Connected</span>
         </div>
       </footer>
 
