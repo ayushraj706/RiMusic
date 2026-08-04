@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from "react";
+// 🔥 NAYA: Firebase hata kar NextAuth import kiya
+import { useSession } from "next-auth/react"; 
 import Sidebar from "@/components/Sidebar"; 
 import { 
   Users, Send, CheckCircle2, Sparkles, Bot, 
@@ -8,17 +10,17 @@ import {
   TrendingUp, TrendingDown, RefreshCw, FileText, MapPin, 
   Image as ImageIcon, Mic, MessageSquare, Video, Sticker, Globe
 } from "lucide-react";
-import { auth } from "@/lib/firebase";
-import { onAuthStateChanged } from "firebase/auth";
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, BarChart, Bar, Legend
+  PieChart, Pie, Cell, BarChart, Bar
 } from 'recharts';
 
 // Premium Light Mode Colors
 const PIE_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#14B8A6', '#6366F1'];
 
 export default function DashboardPage() {
+  const { data: session, status } = useSession(); // NextAuth se session liya
+  
   const [userName, setUserName] = useState("Ayush");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -53,17 +55,16 @@ export default function DashboardPage() {
     }
   }, [timeRange]);
 
+  // 🔥 NAYA: Auth Status check (NextAuth based)
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      if (currentUser) {
-        setUserName(currentUser.displayName || "Ayush");
-        fetchStats();
-      } else {
-        setLoading(false);
-      }
-    });
-    return () => unsubscribe();
-  }, [fetchStats]);
+    if (status === "authenticated" && session?.user) {
+      // Name set karega (Google name ya email ka pehla hissa)
+      setUserName(session.user.name || session.user.email?.split("@")[0] || "Ayush");
+      fetchStats();
+    } else if (status === "unauthenticated") {
+      setLoading(false);
+    }
+  }, [status, session, fetchStats]);
 
   // --- 🚀 TREND CALCULATOR ---
   const { isTrendUp, trendColor } = useMemo(() => {
@@ -73,11 +74,11 @@ export default function DashboardPage() {
     const isUp = (latest.sent || 0) >= (previous.sent || 0);
     return {
       isTrendUp: isUp,
-      trendColor: isUp ? '#00A884' : '#EF4444' // Green if UP, Red if DOWN
+      trendColor: isUp ? '#00A884' : '#EF4444' 
     };
   }, [data?.chartData]);
 
-  // Chart Formatting Data (SAFE EXTRACT)
+  // Chart Formatting Data
   const inboundPieData = [
     { name: 'Text', value: data?.inbound?.text || 0, icon: <MessageSquare className="w-3 h-3"/> },
     { name: 'Images', value: data?.inbound?.image || 0, icon: <ImageIcon className="w-3 h-3"/> },
@@ -118,7 +119,6 @@ export default function DashboardPage() {
           </div>
           
           <div className="flex items-center gap-3">
-            {/* Refresh Button */}
             <button 
               onClick={() => fetchStats(true)} 
               className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold text-sm transition-all shadow-sm border border-gray-200 active:scale-95"
@@ -127,7 +127,6 @@ export default function DashboardPage() {
               {refreshing ? 'Syncing...' : 'Refresh'}
             </button>
 
-            {/* Time Toggle */}
             <div className="flex bg-gray-100 p-1 rounded-xl border border-gray-200 shadow-inner">
               {['24h', '7d', '15d', '30d'].map((range) => (
                 <button 
@@ -151,7 +150,7 @@ export default function DashboardPage() {
           {/* --- 📊 TOP KPI CARDS --- */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
             
-            {/* 1. Outbound (Cascading Read/Delivered Fixed) */}
+            {/* 1. Outbound */}
             <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
               <div className="absolute -top-10 -right-10 w-32 h-32 bg-[#00A884] opacity-5 rounded-full blur-2xl group-hover:opacity-10 transition-opacity"></div>
               <div className="flex items-center justify-between mb-4">
@@ -180,7 +179,7 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* 2. Inbound Received */}
+            {/* 2. Inbound */}
             <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
               <div className="absolute -top-10 -right-10 w-32 h-32 bg-[#3B82F6] opacity-5 rounded-full blur-2xl group-hover:opacity-10 transition-opacity"></div>
               <div className="flex items-center justify-between mb-4">
@@ -203,7 +202,7 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* 3. CRM Leads */}
+            {/* 3. Contacts */}
             <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
               <div className="flex items-center justify-between mb-4">
                 <div className="w-12 h-12 bg-pink-50 text-[#EC4899] rounded-xl flex items-center justify-center border border-pink-100">
@@ -229,7 +228,7 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* 4. Conversion / Read Rate */}
+            {/* 4. Read Rate */}
             <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between mb-4">
@@ -253,13 +252,12 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* --- 📈 MAIN MESSAGE TRAFFIC GRAPH --- */}
+          {/* --- 📈 MAIN GRAPH --- */}
           <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm relative">
             <div className="mb-6 flex justify-between items-start">
               <div>
                 <h3 className="text-xl font-black text-gray-800 flex items-center gap-3">
                   Message Traffic Over Time
-                  {/* Smart Trend Indicator */}
                   {!loading && data?.chartData?.length >= 2 && (
                     <span className={`flex items-center text-xs px-2.5 py-1 rounded-full border font-bold ${isTrendUp ? 'bg-green-50 text-green-600 border-green-200' : 'bg-red-50 text-red-600 border-red-200'}`}>
                       {isTrendUp ? <TrendingUp className="w-3.5 h-3.5 mr-1" /> : <TrendingDown className="w-3.5 h-3.5 mr-1" />}
@@ -304,17 +302,16 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* --- 🧩 DEEP DIVE ANALYTICS ROW --- */}
+          {/* --- 🧩 DEEP DIVE --- */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             
-            {/* 1. Outbound Source & Template Breakdown */}
+            {/* 1. Outbound Breakdown */}
             <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col">
               <h3 className="text-lg font-black text-gray-800 flex items-center gap-2">
                 <Send className="w-5 h-5 text-[#00A884]" /> Outbound Analytics
               </h3>
               <p className="text-xs text-gray-500 font-bold uppercase tracking-widest mt-1 mb-6">Source & Type Breakdown</p>
               
-              {/* Template Validation Fix by Ayush */}
               <div className="grid grid-cols-2 gap-4 mb-6">
                  <div className="bg-green-50 p-4 rounded-xl border border-green-100 flex flex-col justify-center items-center">
                     <p className="text-[10px] text-green-600 font-black uppercase tracking-widest mb-1">Total Templates Sent</p>
@@ -349,7 +346,7 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* 2. Inbound Format Detail (Pie Chart + Detailed List) */}
+            {/* 2. Inbound Format */}
             <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col">
               <h3 className="text-lg font-black text-gray-800 flex items-center gap-2">
                 <ArrowDownToLine className="w-5 h-5 text-[#3B82F6]" /> Inbound Formats
@@ -372,7 +369,6 @@ export default function DashboardPage() {
                   )}
                 </div>
 
-                {/* Detailed Legends for Media & Docs */}
                 <div className="w-full md:w-1/2 flex flex-col gap-2 justify-center">
                   {inboundPieData.map((item, i) => (
                     <div key={item.name} className="flex items-center justify-between p-2 rounded-lg bg-gray-50 border border-gray-100 hover:bg-gray-100 transition-colors">
@@ -391,7 +387,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* --- ⚙️ SYSTEM HEALTH METRICS --- */}
+          {/* --- ⚙️ SYSTEM HEALTH --- */}
           <h3 className="text-lg font-black text-gray-800 mt-4 px-2">System & Bot Infrastructure</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
             
