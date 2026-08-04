@@ -2,15 +2,15 @@
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { ArrowLeft, MoreVertical, Trash2, X } from "lucide-react";
-import { onAuthStateChanged, User } from "firebase/auth";
-import { auth } from "../../lib/firebase"; // Auth abhi bhi Firebase pe hi rakhenge login ke liye
+// 🔥 NAYA: Firebase hata kar NextAuth import kiya
+import { useSession } from "next-auth/react"; 
 
 import Sidebar from "../../components/chat/Sidebar";
 import ChatBubble from "../../components/chat/ChatBubble";
 import ChatInput from "../../components/chat/ChatInput";
 import ThemeSelector, { ChatTheme } from "../../components/chat/ThemeSelector";
 
-// Types sirf types ke liye import kar rahe hain, functions hata diye hain
+// Types
 import { Contact, ChatMessage, MetaTemplate } from "../../lib/chatLogic";
 
 const DEFAULT_WALLPAPER: ChatTheme = {
@@ -32,17 +32,36 @@ export default function ChatPage() {
     return () => window.removeEventListener("load", hideUrlBar);
   }, []);
 
-  // ─── Auth ───────────────────────────────────────────────────────────────
-  const [user, setUser] = useState<User | null>(null);
+  // ─── Auth (NextAuth + LocalStorage for Agent) ───────────────────────────
+  const { data: session, status } = useSession();
+  const [user, setUser] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (u) => {
-      setUser(u);
-      setAuthLoading(false);
-    });
-    return () => unsub();
-  }, []);
+    const checkAuth = () => {
+      // 1. Check for Support Agent (LocalStorage)
+      if (typeof window !== "undefined") {
+        const agentToken = localStorage.getItem("agent_token");
+        if (agentToken) {
+          setUser({ uid: agentToken, role: "AGENT" });
+          setAuthLoading(false);
+          return;
+        }
+      }
+
+      // 2. Check for Admin (NextAuth)
+      if (status !== "loading") {
+        if (session?.user) {
+          setUser(session.user);
+        } else {
+          setUser(null);
+        }
+        setAuthLoading(false);
+      }
+    };
+
+    checkAuth();
+  }, [session, status]);
 
   // ─── State Variables ────────────────────────────────────────────────────
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -148,7 +167,6 @@ export default function ChatPage() {
 
   const handleSendMedia = async (file: File, type: "image" | "video" | "document" | "audio") => {
     if (!activeContact) return;
-    // NOTE: Yahan pehle file ko Cloudinary par upload karna hoga ya API me FormData bhejna hoga
     alert("Media API abhi set karni baaki hai backend me!");
   };
 
@@ -321,7 +339,7 @@ export default function ChatPage() {
 
             {/* Floating Chat Input */}
             <ChatInput
-              uid={user?.uid || ""}
+              uid={user?.id || user?.uid || ""}
               inputText={inputText}
               setInputText={setInputText}
               onSend={handleSendText}
