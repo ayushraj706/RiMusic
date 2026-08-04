@@ -28,7 +28,6 @@ import {
 import ConfigModal from "./ConfigModal";
 
 export default function Sidebar() {
-  // NextAuth se session nikal rahe hain
   const { data: session, status } = useSession(); 
   
   const [user, setUser] = useState<any>(null);
@@ -56,13 +55,12 @@ export default function Sidebar() {
           setUserRole("AGENT");
           setAgentName(savedAgentName || "Support Agent");
           setUser({ uid: agentToken }); 
-          setIsMatched(true); // Agent ko API config hamesha true manenge
+          setIsMatched(true); 
           setLoading(false);
           return;
         }
       }
 
-      // 2. Agar NextAuth loading state mein hai toh wait karo
       if (status === "loading") return;
 
       // 3. Check karo kya ADMIN (NextAuth) logged in hai?
@@ -70,18 +68,15 @@ export default function Sidebar() {
         setUserRole("ADMIN");
         setUser(session.user);
         
-        // 🔥 NAYA: Firebase Realtime DB ki jagah apne Prisma API se config check karo
-        try {
-          // (Yeh API route humein aage banana hoga jo SystemSettings table check karega)
-          const res = await fetch("/api/settings/check-config");
-          if (res.ok) {
-            const data = await res.json();
-            setIsMatched(data.isMatched);
+        // 🔥 FIX: Fake API route hata kar Local Storage check lagaya
+        if (typeof window !== "undefined") {
+          const savedMetaToken = localStorage.getItem("metaAccessToken");
+          // Agar token local storage mein hai, iska matlab API linked hai!
+          if (savedMetaToken && savedMetaToken.length > 10) {
+            setIsMatched(true);
           } else {
             setIsMatched(false);
           }
-        } catch (error) {
-          setIsMatched(false);
         }
         
         setLoading(false);
@@ -133,7 +128,6 @@ export default function Sidebar() {
         localStorage.removeItem("agent_primary_page");
         router.push("/login");
       } else {
-        // 🔥 NAYA: NextAuth ka logout function
         await signOut({ callbackUrl: "/login" });
       }
     }
