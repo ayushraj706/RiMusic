@@ -1,9 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-// 🔥 NAYA: Firebase hata kar NextAuth ka useSession import kiya
-import { useSession } from "next-auth/react"; 
-import { X, Key, Phone, Link2, CheckCircle2, Copy, ShieldAlert, Check, Facebook } from "lucide-react";
+import { useSession } from "next-auth/react"; // 🔥 NAYA: Firebase hata kar NextAuth lagaya
+import { X, Key, Phone, Link2, CheckCircle2, Copy, ShieldAlert, Check, Facebook, Loader2 } from "lucide-react";
 
 interface ConfigModalProps {
   isOpen: boolean;
@@ -12,9 +11,9 @@ interface ConfigModalProps {
 }
 
 export default function ConfigModal({ isOpen, onClose, onSuccess }: ConfigModalProps) {
-  // 🔥 NAYA: Session se logged-in user ka data nikalna
-  const { data: session } = useSession();
+  const { data: session } = useSession(); // 🔥 NAYA: Session get kiya
 
+  // 👇 Default ko 'manual' kar diya hai
   const [setupMode, setSetupMode] = useState<"manual" | "auto">("manual");
   
   const [accessToken, setAccessToken] = useState("");
@@ -39,9 +38,10 @@ export default function ConfigModal({ isOpen, onClose, onSuccess }: ConfigModalP
       const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || window.location.origin;
       setWebhookUrl(`${baseUrl}/api/webhook`);
 
-      // 🔥 NAYA: Firebase ki jagah NextAuth Session ka user ID use kiya
-      if (session?.user?.id) {
-        const staticToken = "BASEKEY_" + session.user.id.substring(0, 12).toUpperCase();
+      // 🔥 FIX: TypeScript ko bypass karne ke liye 'as any' use kiya
+      const user = session?.user as any;
+      if (user?.id) {
+        const staticToken = "BASEKEY_" + String(user.id).substring(0, 12).toUpperCase();
         setVerifyToken(staticToken);
       } else {
         setVerifyToken("BASEKEY_TEMP_TOKEN");
@@ -61,14 +61,15 @@ export default function ConfigModal({ isOpen, onClose, onSuccess }: ConfigModalP
 
     setLoading(true);
     try {
-      // Local storage backup
+      // Local storage mein backup ke liye rakh lete hain
       localStorage.setItem("metaAccessToken", accessToken);
       localStorage.setItem("phoneId", phoneId);
       localStorage.setItem("wabaId", wabaId);
       localStorage.setItem("webhookVerifyToken", verifyToken);
 
-      // 🔥 NAYA: session.user check kiya
+      // 🔥 Firebase hata kar NextAuth session check lagaya
       if (session?.user) {
+        // 👇 YAHAN "/api/config" KAR DIYA HAI (Pehle /api/settings tha)
         const res = await fetch("/api/config", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
