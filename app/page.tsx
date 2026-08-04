@@ -13,9 +13,13 @@ export default function RootPage() {
     // 1. Check karo ki kya Agent login hai?
     if (typeof window !== "undefined") {
       const agentToken = localStorage.getItem("agent_token");
+      
+      // 🔥 NAYA: Agent ka primary page nikalo (Agar nahi mila toh default /chat par bhejo)
+      const primaryPage = localStorage.getItem("agent_primary_page") || "/chat";
+
       if (agentToken) {
-        // YAHAN THEEK KIYA HAI: /dashboard/chat ki jagah sirf /chat aayega
-        router.push("/chat"); 
+        // Agent ko uske assigned primary page par bhejo!
+        router.push(primaryPage); 
         return;
       }
     }
