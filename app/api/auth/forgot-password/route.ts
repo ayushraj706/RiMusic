@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import crypto from "crypto"; // Secure token generate karne ke liye inbuilt Node.js module
-import prisma from "@/lib/prisma"; // Apna Prisma client path check kar lena
+import { PrismaClient } from "@prisma/client";
+const prisma = new PrismaClient(); // Apna Prisma client path check kar lena
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
