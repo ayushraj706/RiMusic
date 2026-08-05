@@ -19,30 +19,30 @@ model SystemSettings {
   updatedAt           DateTime @updatedAt
 }
 
-// 🔥 UPDATE: 2. Users (Admin aur Agents) Ka Data
+// 🔥 UPDATE: 2. Users (Admin aur Agents) Ka Data - Enhanced for Multi-Auth & Agents
 model User {
   id               String       @id @default(uuid())
   name             String?      // Optional: Google/GitHub se naam na aane par crash na ho
-  email            String?      @unique // Optional: Kyunki GitHub/Twitter email hide kar sakte hain
+  email            String?      @unique // Main linking point for Social & Custom Login
   emailVerified    DateTime?    
   image            String?      
-  passwordHash     String?      
+  passwordHash     String?      // Optional: Social login walo ka null hoga, email walo ka hashed hoga
   
   role             UserRole     @default(AGENT) 
   status           AgentStatus  @default(OFFLINE) 
   
-  // Advanced Access Control & Tracking
+  // Advanced Access Control & Tracking for Agents
   allowedPages     String[]     @default(["/chat", "/contacts"]) 
   primaryPage      String       @default("/chat") 
   currentActivity  String?      @default("Idle") 
+  lastSeen         DateTime?    // 🔥 NAYA: Agent kab last online tha track karne ke liye
+  department       String?      // 🔥 NAYA: Agent kis department ka hai (e.g., Sales, Support)
   
   // Relations: Is agent ke paas kya-kya hai?
   assignedContacts Contact[]    
   sentMessages     Message[]    
   notes            InternalNote[] 
   quickReplies     QuickReply[] 
-  
-  // 🔥 NAYA: Campaign ka relation add kiya
   campaigns        Campaign[]
 
   // NextAuth Relations (Inhi ke zariye Account Linking hoti hai)
@@ -51,6 +51,34 @@ model User {
 
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
+}
+
+// ----------------------------------------------------------------------
+// 🔥 NAYA: AUTHENTICATION TABLES (OTP & Password Reset)
+// ----------------------------------------------------------------------
+
+// Email OTP (6-digit code) save karne ke liye
+model OtpCode {
+  id        String   @id @default(uuid())
+  email     String
+  code      String
+  expiresAt DateTime // Code logic me isko 'now() + 5 minutes' set karna hoga
+  createdAt DateTime @default(now())
+
+  @@unique([email, code]) // Ek email ka specific code verify karne ke liye fast query
+  @@index([email])
+}
+
+// Password Reset karne ke link token ke liye
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  email     String
+  token     String   @unique
+  expiresAt DateTime // Code logic me isko 'now() + 1 hour' ya 15 mins set kar sakte ho
+  createdAt DateTime @default(now())
+
+  @@unique([email, token])
+  @@index([email])
 }
 
 // ----------------------------------------------------------------------
@@ -84,6 +112,7 @@ model Session {
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
+// NextAuth ka default Magic Link Token table
 model VerificationToken {
   identifier String
   token      String   @unique
@@ -93,7 +122,7 @@ model VerificationToken {
 }
 
 // ----------------------------------------------------------------------
-// PURANE TABLES (Inme koi badlaav nahi kiya gaya)
+// PURANE TABLES (Inme koi badlaav nahi kiya gaya hai)
 // ----------------------------------------------------------------------
 
 // 3. WhatsApp Contacts (Customers)
@@ -196,7 +225,7 @@ model ApiKey {
   updatedAt   DateTime  @updatedAt
 }
 
-// 🔥 NAYA: 10. Campaigns Model (WhatsApp Bulk Broadcasts ke liye)
+// 10. Campaigns Model (WhatsApp Bulk Broadcasts ke liye)
 model Campaign {
   id          String   @id @default(uuid())
   name        String
