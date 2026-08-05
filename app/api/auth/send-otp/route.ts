@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
 // Dhyan de: Yahan apne prisma client ka path sahi daalna (jaise @/lib/prisma ya @/prisma/client)
-import prisma from "@/lib/prisma"; 
+import { PrismaClient } from "@prisma/client";
+const prisma = new PrismaClient();
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
