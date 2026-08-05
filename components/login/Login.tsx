@@ -110,7 +110,7 @@ export default function LoginComponent() {
     }
   };
 
-  // Send OTP for Register OR Forgot Password
+  // 🔥 UPDATE: Send OTP for Register OR Forgot Password (with 'type' parameter)
   const handleSendOTP = async (e: React.FormEvent, flowType: "register" | "forgot") => {
     e.preventDefault();
     if (!email) return setMessage({ type: "error", text: "Please enter your email." });
@@ -122,16 +122,16 @@ export default function LoginComponent() {
       const res = await fetch("/api/auth/send-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email })
+        body: JSON.stringify({ email, type: flowType }) // Yahan 'type' bhejna zaroori hai
       });
       
+      const data = await res.json();
       if (res.ok) {
         setMessage({ type: "success", text: `OTP sent to ${email}` });
         startTimer();
         setAdminFlow(flowType === "register" ? "REGISTER_OTP" : "FORGOT_OTP");
-        setOtp(""); // reset otp field
+        setOtp(""); 
       } else {
-        const data = await res.json();
         setMessage({ type: "error", text: data.error || "Failed to send OTP." });
       }
     } catch (err) {
@@ -141,14 +141,34 @@ export default function LoginComponent() {
     }
   };
 
-  // Verify OTP for Register -> Move to Set Password
-  const handleVerifyOtpRegister = (e: React.FormEvent) => {
+  // 🔥 UPDATE: REAL Verify OTP for Register -> Move to Set Password
+  const handleVerifyOtpRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     if(otp.length !== 6) return setMessage({type: "error", text: "Enter 6-digit OTP"});
-    // Assuming backend will verify at final step, or you can add API verification here.
-    // For smooth UI, we move them to set password screen directly.
-    setMessage({ type: "success", text: "OTP Verified! Now set your password." });
-    setAdminFlow("REGISTER_PASS");
+    
+    setIsLoading(true);
+    setMessage({ type: "", text: "" });
+    
+    try {
+      const res = await fetch("/api/auth/verify-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, otp }) // Backend se asli verification
+      });
+      
+      const data = await res.json();
+      
+      if (res.ok) {
+        setMessage({ type: "success", text: "OTP Verified! Now set your password." });
+        setAdminFlow("REGISTER_PASS");
+      } else {
+        setMessage({ type: "error", text: data.error || "Invalid or Expired OTP." });
+      }
+    } catch (error) {
+      setMessage({ type: "error", text: "Network error. Try again." });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // Final Register Submit (Email + OTP + Password)
@@ -158,14 +178,12 @@ export default function LoginComponent() {
     setMessage({ type: "", text: "" });
     
     try {
-      // NOTE: Make sure to create this API endpoint to save new user with password
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, otp, password: newPassword })
       });
       if (res.ok) {
-        // Auto login after successful register
         await signIn("credentials", { redirect: false, email, password: newPassword, loginType: "password" });
         window.location.href = "/dashboard";
       } else {
@@ -179,12 +197,34 @@ export default function LoginComponent() {
     }
   };
 
-  // Verify OTP for Forgot Password -> Move to Set New Password
-  const handleVerifyOtpForgot = (e: React.FormEvent) => {
+  // 🔥 UPDATE: REAL Verify OTP for Forgot Password -> Move to Set New Password
+  const handleVerifyOtpForgot = async (e: React.FormEvent) => {
     e.preventDefault();
     if(otp.length !== 6) return setMessage({type: "error", text: "Enter 6-digit OTP"});
-    setMessage({ type: "success", text: "OTP Verified! Create a new password." });
-    setAdminFlow("FORGOT_PASS");
+    
+    setIsLoading(true);
+    setMessage({ type: "", text: "" });
+
+    try {
+      const res = await fetch("/api/auth/verify-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, otp }) // Backend se asli verification
+      });
+      
+      const data = await res.json();
+      
+      if (res.ok) {
+        setMessage({ type: "success", text: "OTP Verified! Create a new password." });
+        setAdminFlow("FORGOT_PASS");
+      } else {
+        setMessage({ type: "error", text: data.error || "Invalid or Expired OTP." });
+      }
+    } catch (error) {
+      setMessage({ type: "error", text: "Network error. Try again." });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // Final Reset Password Submit
@@ -194,7 +234,6 @@ export default function LoginComponent() {
     setMessage({ type: "", text: "" });
     
     try {
-      // NOTE: Make sure to create this API endpoint to update the password
       const res = await fetch("/api/auth/reset-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -369,12 +408,19 @@ export default function LoginComponent() {
                     <Edit2 className="w-3.5 h-3.5" /> Change
                   </button>
                 </div>
+                
+                {/* 🔥 FIXED OTP BOX UI */}
                 <div className="flex items-center gap-3 bg-gray-50 p-4 rounded-xl border border-gray-200 focus-within:border-[#1877F2] focus-within:bg-white transition-all">
                   <ShieldCheck className="w-5 h-5 text-[#1877F2]" />
-                  <input type="text" required maxLength={6} placeholder="Enter 6-digit OTP" value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))} className="bg-transparent flex-1 outline-none text-center text-2xl font-bold tracking-[0.5em] text-gray-900 placeholder:text-gray-300 placeholder:tracking-normal placeholder:font-normal placeholder:text-[15px]" />
+                  <input 
+                    type="text" required maxLength={6} placeholder="6-digit code" 
+                    value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))} 
+                    className="bg-transparent flex-1 outline-none text-center text-2xl font-bold tracking-[0.3em] pl-[0.3em] text-gray-900 placeholder:text-gray-300 placeholder:tracking-normal placeholder:font-medium placeholder:pl-0 placeholder:text-[15px]" 
+                  />
                 </div>
-                <button type="submit" disabled={otp.length !== 6} className="w-full bg-[#1877F2] text-white py-3.5 rounded-xl font-bold hover:bg-[#166FE5] transition disabled:opacity-50">
-                  Verify & Continue
+
+                <button type="submit" disabled={otp.length !== 6 || isLoading} className="w-full bg-[#1877F2] text-white py-3.5 rounded-xl font-bold hover:bg-[#166FE5] transition disabled:opacity-50 flex justify-center items-center gap-2">
+                  {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : "Verify & Continue"}
                 </button>
                 <div className="text-center pt-2">
                   {timer > 0 ? (
@@ -433,12 +479,19 @@ export default function LoginComponent() {
                     <Edit2 className="w-3.5 h-3.5" /> Change
                   </button>
                 </div>
+                
+                {/* 🔥 FIXED OTP BOX UI */}
                 <div className="flex items-center gap-3 bg-gray-50 p-4 rounded-xl border border-gray-200 focus-within:border-gray-900 focus-within:bg-white transition-all">
                   <ShieldCheck className="w-5 h-5 text-gray-900" />
-                  <input type="text" required maxLength={6} placeholder="Enter 6-digit OTP" value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))} className="bg-transparent flex-1 outline-none text-center text-2xl font-bold tracking-[0.5em] text-gray-900 placeholder:text-gray-300 placeholder:tracking-normal placeholder:font-normal placeholder:text-[15px]" />
+                  <input 
+                    type="text" required maxLength={6} placeholder="6-digit code" 
+                    value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))} 
+                    className="bg-transparent flex-1 outline-none text-center text-2xl font-bold tracking-[0.3em] pl-[0.3em] text-gray-900 placeholder:text-gray-300 placeholder:tracking-normal placeholder:font-medium placeholder:pl-0 placeholder:text-[15px]" 
+                  />
                 </div>
-                <button type="submit" disabled={otp.length !== 6} className="w-full bg-gray-900 text-white py-3.5 rounded-xl font-bold hover:bg-gray-800 transition disabled:opacity-50">
-                  Verify OTP
+
+                <button type="submit" disabled={otp.length !== 6 || isLoading} className="w-full bg-gray-900 text-white py-3.5 rounded-xl font-bold hover:bg-gray-800 transition disabled:opacity-50 flex justify-center items-center gap-2">
+                  {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : "Verify OTP"}
                 </button>
                 <div className="text-center pt-2">
                   {timer > 0 ? (
