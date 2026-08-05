@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
-// Dhyan de: Yahan apne prisma client ka path sahi daalna (jaise @/lib/prisma ya @/prisma/client)
 import { PrismaClient } from "@prisma/client";
-const prisma = new PrismaClient();
 
+const prisma = new PrismaClient();
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 // 🎨 PREMIUM EMAIL TEMPLATE FUNCTION
@@ -14,7 +13,7 @@ const getEmailTemplate = (otp: string) => `
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f9fafb; margin: 0; padding: 0; }
     .container { max-width: 500px; margin: 40px auto; background-color: #ffffff; border-radius: 16px; border: 1px solid #f3f4f6; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
-    .header { background-color: #00A884; padding: 24px; text-align: center; color: #ffffff; }
+    .header { background-color: #1877F2; padding: 24px; text-align: center; color: #ffffff; }
     .header h1 { margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.5px; }
     .content { padding: 32px 24px; text-align: center; color: #111827; }
     .content p { font-size: 16px; line-height: 1.5; color: #4b5563; margin-top: 0; }
@@ -28,8 +27,8 @@ const getEmailTemplate = (otp: string) => `
       <h1>BaseKey</h1>
     </div>
     <div class="content">
-      <h2 style="margin-top: 0; font-size: 20px;">Your Secure Login Code</h2>
-      <p>Please use the verification code below to sign in to your BaseKey workspace.</p>
+      <h2 style="margin-top: 0; font-size: 20px;">Your Secure Verification Code</h2>
+      <p>Please use the verification code below to continue with your BaseKey workspace.</p>
       
       <div class="otp-box">${otp}</div>
       
@@ -46,20 +45,35 @@ const getEmailTemplate = (otp: string) => `
 
 export async function POST(req: Request) {
   try {
-    const { email } = await req.json();
+    // Frontend se email aur type ("register" ya "forgot") dono aayenge
+    const { email, type } = await req.json();
 
     if (!email) {
       return NextResponse.json({ error: "Email is required" }, { status: 400 });
     }
 
-    // 1. Generate 6-digit random OTP
+    // 🔥 NAYA LOGIC: Check karo ki user database me pehle se hai ya nahi
+    const existingUser = await prisma.user.findUnique({
+      where: { email }
+    });
+
+    // 1. Agar Register kar raha hai aur pehle se account hai -> Rok do
+    if (type === "register" && existingUser) {
+      return NextResponse.json({ error: "Email already registered. Please login." }, { status: 400 });
+    }
+
+    // 2. Agar Forgot Password kar raha hai aur account hi nahi hai -> Rok do
+    if (type === "forgot" && !existingUser) {
+      return NextResponse.json({ error: "No account found with this email." }, { status: 404 });
+    }
+
+    // 3. Generate 6-digit random OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     
-    // 2. Expiry time set karna (Current time + 5 minutes)
+    // 4. Expiry time set karna (Current time + 5 minutes)
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
 
-    // 3. Database me purane OTP delete karke naya save karna
-    // Isse table clean rehti hai aur purane unused OTP delete ho jate hain
+    // 5. Database me purane OTP delete karke naya save karna
     await prisma.otpCode.deleteMany({
       where: { email }
     });
@@ -72,12 +86,17 @@ export async function POST(req: Request) {
       }
     });
 
-    // 4. Resend ke zariye Email bhejna
+    // 6. Dynamic subject banaya (Register ke liye alag, Forgot ke liye alag)
+    const emailSubject = type === "register" 
+      ? 'Welcome to BaseKey - Verify your email' 
+      : 'Reset your BaseKey Password';
+
+    // 7. Resend ke zariye Email bhejna
     const { data, error } = await resend.emails.send({
-      from: 'BaseKey Security <support@basekey.in>', // Yahan apna setup kiya hua custom domain email daalna
+      from: 'BaseKey Security <support@basekey.in>', // Custom domain email
       to: [email],
-      subject: 'Your BaseKey Login Code',
-      html: getEmailTemplate(otp), // Upar banaya hua HTML template call kiya
+      subject: emailSubject,
+      html: getEmailTemplate(otp), 
     });
 
     if (error) {
